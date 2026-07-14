@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spline+Sans+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#08080a;font-family:'Spline Sans Mono',ui-monospace,monospace;-webkit-font-smoothing:antialiased;color:#e6e6ea}
+  @keyframes barDraw{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+  @keyframes riseIn{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  @keyframes blink{0%,48%{opacity:1}49%,100%{opacity:0}}
+  @keyframes caret{0%,49%{opacity:1}50%,100%{opacity:0}}
+  @keyframes pulse{0%{transform:scale(.5);opacity:.8}100%{transform:scale(2.6);opacity:0}}
+</style>
+</helmet>
+
+<div style="max-width:1120px;margin:0 auto;padding:72px 40px 120px">
+
+  <!-- masthead -->
+  <div style="display:flex;align-items:center;gap:10px;font-size:11px;letter-spacing:.14em;color:#6a6a74"><span style="width:8px;height:8px;background:#A78BFA;box-shadow:0 0 8px #A78BFA"></span><span>WANDERLOOP</span><span style="color:#3a3a44">/</span><span>product family</span></div>
+  <div style="font-size:52px;font-weight:600;letter-spacing:.02em;margin-top:22px;line-height:1">DESIGN SYSTEM</div>
+  <div style="display:flex;gap:26px;margin-top:20px;font-size:11px;color:#6a6a74;letter-spacing:.04em;flex-wrap:wrap"><span><span style="color:#8a8a94">v2.0</span> · terminal / hud</span><span>type · spline sans mono</span><span>accent · #A78BFA</span><span>platforms · mobile + desktop web</span></div>
+  <div style="margin-top:22px;height:9px;background-image:repeating-linear-gradient(90deg,rgba(255,255,255,.16) 0 1px,transparent 1px 26px);border-bottom:1px solid rgba(255,255,255,.09)"></div>
+  <div style="margin-top:18px;font-size:12px;color:#7a7a84;line-height:1.7;max-width:680px">A sharp, minimal terminal aesthetic for the Wanderloop family of location apps — Check-In, Atlas, Timeline and future products. Monospace at small sizes, near-black surfaces, hairline structure, and a single purple accent used sparingly. Tokens, type, iconography and components are shared; each product composes them into its own screens across mobile and desktop web.</div>
+
+  <!-- §00 PRINCIPLES -->
+  <div style="display:flex;align-items:baseline;gap:12px;margin:64px 0 24px"><span style="font-size:11px;color:#A78BFA;letter-spacing:.1em">§00</span><span style="font-size:13px;letter-spacing:.22em">PRINCIPLES</span><span style="flex:1;height:1px;background:rgba(255,255,255,.09)"></span></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.07)">
+    <div style="background:#08080a;padding:18px"><div style="font-size:11px;color:#A78BFA;letter-spacing:.1em">01 / sharp</div><div style="font-size:11px;color:#8a8a94;margin-top:9px;line-height:1.7">No rounded corners. Structure is drawn with 1px hairlines, ticks and boxed cells.</div></div>
+    <div style="background:#08080a;padding:18px"><div style="font-size:11px;color:#A78BFA;letter-spacing:.1em">02 / airy</div><div style="font-size:11px;color:#8a8a94;margin-top:9px;line-height:1.7">Lots of black space. Few elements per view. Density comes from data, not chrome.</div></div>
+    <div style="background:#08080a;padding:18px"><div style="font-size:11px;color:#A78BFA;letter-spacing:.1em">03 / sparing accent</div><div style="font-size:11px;color:#8a8a94;margin-top:9px;line-height:1.7">Purple marks one thing per view: the peak, the live point, or the primary action.</div></div>
+    <div style="background:#08080a;padding:18px"><div style="font-size:11px;color:#A78BFA;letter-spacing:.1em">04 / labels vs values</div><div style="font-size:11px;color:#8a8a94;margin-top:9px;line-height:1.7">UPPERCASE tracked labels; lowercase values. The mono grid does the rest.</div></div>
+  </div>
+
+  <!-- §01 COLOR -->
+  <div style="display:flex;align-items:baseline;gap:12px;margin:64px 0 24px"><span style="font-size:11px;color:#A78BFA;letter-spacing:.1em">§01</span><span style="font-size:13px;letter-spacing:.22em">COLOR</span><span style="flex:1;height:1px;background:rgba(255,255,255,.09)"></span><span style="font-size:10px;color:#54545e">tokens</span></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:14px">
+    <div style="border:1px solid rgba(255,255,255,.08)"><div style="height:54px;background:#08080a;border-bottom:1px solid rgba(255,255,255,.08)"></div><div style="padding:9px 11px"><div style="font-size:11px">base</div><div style="font-size:10px;color:#6a6a74;margin-top:2px">#08080A</div><div style="font-size:9px;color:#54545e;margin-top:5px">app background</div></div></div>
+    <div style="border:1px solid rgba(255,255,255,.08)"><div style="height:54px;background:#0c0c10;border-bottom:1px solid rgba(255,255,255,.08)"></div><div style="padding:9px 11px"><div style="font-size:11px">surface</div><div style="font-size:10px;color:#6a6a74;margin-top:2px">#0C0C10</div><div style="font-size:9px;color:#54545e;margin-top:5px">panels, sheet, inputs</div></div></div>
+    <div style="border:1px solid rgba(255,255,255,.08)"><div style="height:54px;background:#0a0a0d;border-bottom:1px solid rgba(255,255,255,.08)"></div><div style="padding:9px 11px"><div style="font-size:11px">map-ink</div><div style="font-size:10px;color:#6a6a74;margin-top:2px">#0A0A0D</div><div style="font-size:9px;color:#54545e;margin-top:5px">map canvas</div></div></div>
+    <div style="border:1px solid rgba(255,255,255,.08)"><div style="height:54px;background:#A78BFA;border-bottom:1px solid rgba(255,255,255,.08)"></div><div style="padding:9px 11px"><div style="font-size:11px">accent</div><div style="font-size:10px;color:#6a6a74;margin-top:2px">#A78BFA</div><div style="font-size:9px;color:#54545e;margin-top:5px">peak · live · primary</div></div></div>
+    <div style="border:1px solid rgba(255,255,255,.08)"><div style="height:54px;background:#7c6bb0;border-bottom:1px solid rgba(255,255,255,.08)"></div><div style="padding:9px 11px"><div style="font-size:11px">accent-muted</div><div style="font-size:10px;color:#6a6a74;margin-top:2px">#7C6BB0</div><div style="font-size:9px;color:#54545e;margin-top:5px">secondary markers</div></div></div>
+    <div style="border:1px solid rgba(255,255,255,.08)"><div style="height:54px;background:#3a3a44;border-bottom:1px solid rgba(255,255,255,.08)"></div><div style="padding:9px 11px"><div style="font-size:11px">bar-track</div><div style="font-size:10px;color:#6a6a74;margin-top:2px">#3A3A44</div><div style="font-size:9px;color:#54545e;margin-top:5px">non-peak bar fill</div></div></div>
+    <div style="border:1px solid rgba(255,255,255,.08)"><div style="height:54px;background:#e6e6ea;border-bottom:1px solid rgba(255,255,255,.08)"></div><div style="padding:9px 11px"><div style="font-size:11px">text/primary</div><div style="font-size:10px;color:#6a6a74;margin-top:2px">#E6E6EA</div><div style="font-size:9px;color:#54545e;margin-top:5px">names, values</div></div></div>
+    <div style="border:1px solid rgba(255,255,255,.08)"><div style="height:54px;background:#9a9aa4;border-bottom:1px solid rgba(255,255,255,.08)"></div><div style="padding:9px 11px"><div style="font-size:11px">text/secondary</div><div style="font-size:10px;color:#6a6a74;margin-top:2px">#9A9AA4</div><div style="font-size:9px;color:#54545e;margin-top:5px">native names</div></div></div>
+    <div style="border:1px solid rgba(255,255,255,.08)"><div style="height:54px;background:#7a7a84;border-bottom:1px solid rgba(255,255,255,.08)"></div><div style="padding:9px 11px"><div style="font-size:11px">text/tertiary</div><div style="font-size:10px;color:#6a6a74;margin-top:2px">#7A7A84</div><div style="font-size:9px;color:#54545e;margin-top:5px">type tags</div></div></div>
+    <div style="border:1px solid rgba(255,255,255,.08)"><div style="height:54px;background:#54545e;border-bottom:1px solid rgba(255,255,255,.08)"></div><div style="padding:9px 11px"><div style="font-size:11px">text/faint</div><div style="font-size:10px;color:#6a6a74;margin-top:2px">#54545E</div><div style="font-size:9px;color:#54545e;margin-top:5px">address, index</div></div></div>
+    <div style="border:1px solid rgba(255,255,255,.08)"><div style="height:54px;background:#d0a24c;border-bottom:1px solid rgba(255,255,255,.08)"></div><div style="padding:9px 11px"><div style="font-size:11px">warn</div><div style="font-size:10px;color:#6a6a74;margin-top:2px">#D0A24C</div><div style="font-size:9px;color:#54545e;margin-top:5px">initializing, caution</div></div></div>
+    <div style="border:1px solid rgba(255,255,255,.08)"><div style="height:54px;background:#d06a6a;border-bottom:1px solid rgba(255,255,255,.08)"></div><div style="padding:9px 11px"><div style="font-size:11px">danger</div><div style="font-size:10px;color:#6a6a74;margin-top:2px">#D06A6A</div><div style="font-size:9px;color:#54545e;margin-top:5px">delete / destructive</div></div></div>
+  </div>
+  <div style="margin-top:16px;display:flex;gap:26px;flex-wrap:wrap;font-size:10px;color:#6a6a74;letter-spacing:.04em">
+    <span style="color:#7a7a84">HAIRLINES →</span><span>rgba(255,255,255,.05) faint</span><span>.09 default</span><span>.14 strong</span><span style="color:#7a7a84">GLOW →</span><span>0 0 8px rgba(167,139,250,.6)</span>
+  </div>
+
+  <!-- §02 TYPOGRAPHY -->
+  <div style="display:flex;align-items:baseline;gap:12px;margin:64px 0 24px"><span style="font-size:11px;color:#A78BFA;letter-spacing:.1em">§02</span><span style="font-size:13px;letter-spacing:.22em">TYPOGRAPHY</span><span style="flex:1;height:1px;background:rgba(255,255,255,.09)"></span><span style="font-size:10px;color:#54545e">spline sans mono</span></div>
+  <div style="border:1px solid rgba(255,255,255,.08)">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;padding:16px 18px;border-bottom:1px solid rgba(255,255,255,.06)"><span style="font-size:23px;font-weight:600;letter-spacing:.05em">TIMELINE</span><span style="font-size:10px;color:#54545e">display · 23px / 600 / +.05em · screen titles</span></div>
+    <div style="display:flex;align-items:baseline;justify-content:space-between;padding:16px 18px;border-bottom:1px solid rgba(255,255,255,.06)"><span style="font-size:14px">inokashira park</span><span style="font-size:10px;color:#54545e">value · 14px / 400 · names & primary content</span></div>
+    <div style="display:flex;align-items:baseline;justify-content:space-between;padding:16px 18px;border-bottom:1px solid rgba(255,255,255,.06)"><span style="font-size:12px;color:#9a9aa4">井の頭恩賜公園</span><span style="font-size:10px;color:#54545e">secondary · 12px / 400 · native names</span></div>
+    <div style="display:flex;align-items:baseline;justify-content:space-between;padding:16px 18px;border-bottom:1px solid rgba(255,255,255,.06)"><span style="font-size:10px;letter-spacing:.16em;color:#6a6a74">SECTION LABEL</span><span style="font-size:10px;color:#54545e">label · 10px / +.16em / UPPER · section headers</span></div>
+    <div style="display:flex;align-items:baseline;justify-content:space-between;padding:16px 18px;border-bottom:1px solid rgba(255,255,255,.06)"><span style="font-size:10px;color:#54545e">park · gotenyama, musashino</span><span style="font-size:10px;color:#54545e">meta · 10px / 400 · type & address</span></div>
+    <div style="display:flex;align-items:baseline;justify-content:space-between;padding:16px 18px"><span style="font-size:9px;letter-spacing:.1em;color:#8a8a94">MAP · TIMELINE · PLACES</span><span style="font-size:10px;color:#54545e">micro · 9px / +.1em · nav & counters</span></div>
+  </div>
+  <div style="margin-top:14px;font-size:11px;color:#7a7a84;line-height:1.7">Casing rule: <span style="color:#A78BFA">UPPERCASE + tracking</span> for labels, titles and states; <span style="color:#A78BFA">lowercase</span> for every value, place name and address. Weights used: 400 (body), 500, 600 (titles). Numerals share the mono grid — tabular by default.</div>
+
+  <!-- §03 STRUCTURE -->
+  <div style="display:flex;align-items:baseline;gap:12px;margin:64px 0 24px"><span style="font-size:11px;color:#A78BFA;letter-spacing:.1em">§03</span><span style="font-size:13px;letter-spacing:.22em">STRUCTURE &amp; SPACING</span><span style="flex:1;height:1px;background:rgba(255,255,255,.09)"></span></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+    <div style="border:1px solid rgba(255,255,255,.08);padding:18px">
+      <div style="font-size:10px;letter-spacing:.14em;color:#6a6a74;margin-bottom:14px">TICK STRIP <span style="color:#A78BFA">— mobile only</span></div>
+      <div style="height:9px;background-image:repeating-linear-gradient(90deg,rgba(255,255,255,.16) 0 1px,transparent 1px 24px);border-bottom:1px solid rgba(255,255,255,.09)"></div>
+      <div style="font-size:10px;color:#54545e;margin-top:12px;line-height:1.7">1px ticks every 24px on a hairline baseline, separating header from body. <span style="color:#7a7a84">Mobile only</span> — it sits under the screen title on phone layouts. On desktop web the strip is dropped; the sidebar edge and the top hairline of the content column carry that structural role instead.</div>
+    </div>
+    <div style="border:1px solid rgba(255,255,255,.08);padding:18px">
+      <div style="font-size:10px;letter-spacing:.14em;color:#6a6a74;margin-bottom:14px">SECTION LABEL <span style="color:#54545e">— count folds into the rule</span></div>
+      <div style="display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.16em;color:#6a6a74"><span>SAVED</span><span style="color:#54545e">·</span><span style="color:#9a9aa4">24</span><span style="flex:1;height:1px;background:rgba(255,255,255,.08)"></span><span>most visited</span></div>
+      <div style="font-size:10px;color:#54545e;margin-top:14px;line-height:1.7">LABEL · count on the left, a hairline spans the gap, a descriptor sits right. Also used as the timeline day separator.</div>
+    </div>
+    <div style="border:1px solid rgba(255,255,255,.08);padding:18px">
+      <div style="font-size:10px;letter-spacing:.14em;color:#6a6a74;margin-bottom:12px">SCREEN FRAME <span style="color:#54545e">— mobile</span></div>
+      <div style="font-size:11px;color:#8a8a94;line-height:1.9">380 × 788 · 1px hairline border<br>18px horizontal padding<br>row rhythm 13px vertical<br>tab bar pinned · ~48px</div>
+    </div>
+    <div style="border:1px solid rgba(255,255,255,.08);padding:18px">
+      <div style="font-size:10px;letter-spacing:.14em;color:#6a6a74;margin-bottom:12px">SCREEN ANATOMY</div>
+      <div style="font-size:11px;color:#8a8a94;line-height:1.9"><span style="color:#6a6a74">mobile ·</span> status bar → title + readout → tick strip → [ map ] → section label → rows → bottom search → tab bar<br><br><span style="color:#6a6a74">desktop ·</span> sidebar nav │ top rail (title + readout) → content columns → inline search</div>
+    </div>
+  </div>
+
+  <!-- §04 ICONOGRAPHY -->
+  <div style="display:flex;align-items:baseline;gap:12px;margin:64px 0 24px"><span style="font-size:11px;color:#A78BFA;letter-spacing:.1em">§04</span><span style="font-size:13px;letter-spacing:.22em">ICONOGRAPHY</span><span style="flex:1;height:1px;background:rgba(255,255,255,.09)"></span><span style="font-size:10px;color:#54545e">tabler · tab bar only</span></div>
+  <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:stretch">
+    <div style="flex:1;min-width:280px;border:1px solid rgba(255,255,255,.08);display:grid;grid-template-columns:repeat(4,1fr)">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:9px;padding:20px 0;font-size:9px;letter-spacing:.1em;color:#8a8a94;border-right:1px solid rgba(255,255,255,.06)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"><path d="M3 7l6 -3l6 3l6 -3v13l-6 3l-6 -3l-6 3z"/><path d="M9 4v13"/><path d="M15 7v13"/></svg>map</div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:9px;padding:20px 0;font-size:9px;letter-spacing:.1em;color:#8a8a94;border-right:1px solid rgba(255,255,255,.06)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"><path d="M12 8v4l2 2"/><path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5"/></svg>timeline</div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:9px;padding:20px 0;font-size:9px;letter-spacing:.1em;color:#A78BFA;border-right:1px solid rgba(255,255,255,.06)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"><path d="M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/><path d="M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z"/></svg>places</div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:9px;padding:20px 0;font-size:9px;letter-spacing:.1em;color:#8a8a94"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z"/><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/></svg>config</div>
+    </div>
+    <div style="flex:1;min-width:260px;border:1px solid rgba(255,255,255,.08);padding:18px;font-size:11px;color:#8a8a94;line-height:1.9">
+      set · <span style="color:#e6e6ea">Tabler Icons</span><br>size · 16px (nav), 22px shown here<br>stroke · 1.5 · linecap square · linejoin miter<br>color · #5C5C66 default · <span style="color:#A78BFA">#A78BFA active</span> + accent rule<br><br><span style="color:#7a7a84">Icons appear ONLY in navigation</span> — the tab bar on mobile, the sidebar on desktop. Everywhere else the UI stays glyph-free — markers, prompts and states are drawn with dots, ticks and text.
+    </div>
+  </div>
+
+  <!-- §05 COMPONENTS -->
+  <div style="display:flex;align-items:baseline;gap:12px;margin:64px 0 24px"><span style="font-size:11px;color:#A78BFA;letter-spacing:.1em">§05</span><span style="font-size:13px;letter-spacing:.22em">COMPONENTS</span><span style="flex:1;height:1px;background:rgba(255,255,255,.09)"></span><span style="font-size:10px;color:#54545e">live samples</span></div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:18px">
+
+    <!-- list row -->
+    <div style="border:1px solid rgba(255,255,255,.08);padding:16px 16px 18px"><div style="font-size:10px;letter-spacing:.14em;color:#6a6a74;margin-bottom:14px">LIST ROW</div>
+      <div style="display:flex;align-items:flex-start;gap:13px">
+        <span style="width:9px;height:9px;border-radius:50%;background:#A78BFA;box-shadow:0 0 8px rgba(167,139,250,.6);margin-top:6px;flex:none"></span>
+        <div style="flex:1;min-width:0"><div style="font-size:14px">inokashira park</div><div style="font-size:12px;color:#9a9aa4;margin-top:3px">井の頭恩賜公園</div><div style="display:flex;gap:7px;margin-top:5px;font-size:10px"><span style="color:#7a7a84">park</span><span style="color:#3a3a44">·</span><span style="color:#54545e">gotenyama, musashino</span></div></div>
+        <div style="text-align:right;flex:none"><div style="font-size:10px;color:#54545e">01</div><div style="font-size:11px;color:#A78BFA;margin-top:4px">61 visits</div></div>
+      </div>
+      <div style="font-size:10px;color:#54545e;margin-top:14px;line-height:1.7">circle marker (accent = top rank / closest) · name · native · type·place · right metric with index above. Shared by Places &amp; Check-In.</div>
+    </div>
+
+    <!-- histogram + spine -->
+    <div style="border:1px solid rgba(255,255,255,.08);padding:16px 16px 18px"><div style="font-size:10px;letter-spacing:.14em;color:#6a6a74;margin-bottom:14px">HISTOGRAM + SPINE</div>
+      <div style="position:relative;padding-left:22px">
+        <div style="position:absolute;left:6px;top:4px;bottom:4px;width:1px;background:rgba(255,255,255,.11)"></div>
+        <span style="position:absolute;left:2px;top:2px;width:9px;height:9px;border-radius:50%;border:1px solid #54545e;background:#08080a"></span>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <div style="display:flex;align-items:center;gap:10px"><span style="width:18px;text-align:right;font-size:10px;color:#54545e">29</span><div style="position:relative;flex:1;height:6px;background:rgba(255,255,255,.035)"><div style="position:absolute;inset:0;width:67%;background:#3a3a44;transform-origin:left;animation:barDraw .8s cubic-bezier(.16,1,.3,1) both"></div></div></div>
+          <div style="display:flex;align-items:center;gap:10px"><span style="width:18px;text-align:right;font-size:10px;color:#A78BFA">43</span><div style="position:relative;flex:1;height:6px;background:rgba(255,255,255,.035)"><div style="position:absolute;inset:0;width:100%;background:#A78BFA;box-shadow:0 0 10px rgba(167,139,250,.45);transform-origin:left;animation:barDraw .8s cubic-bezier(.16,1,.3,1) .1s both"></div></div></div>
+          <div style="display:flex;align-items:center;gap:10px"><span style="width:18px;text-align:right;font-size:10px;color:#54545e">10</span><div style="position:relative;flex:1;height:6px;background:rgba(255,255,255,.035)"><div style="position:absolute;inset:0;width:23%;background:#3a3a44;transform-origin:left;animation:barDraw .8s cubic-bezier(.16,1,.3,1) .2s both"></div></div></div>
+        </div>
+      </div>
+      <div style="font-size:10px;color:#54545e;margin-top:14px;line-height:1.7">count-labelled bars draw in from the left; the single peak is accent. Check-ins sit on a vertical spine — filled purple node = check-in, hollow = travel session.</div>
+    </div>
+
+    <!-- map panel -->
+    <div style="border:1px solid rgba(255,255,255,.08);padding:16px 16px 18px"><div style="font-size:10px;letter-spacing:.14em;color:#6a6a74;margin-bottom:14px">MAP PANEL</div>
+      <div style="position:relative;height:120px;background:#0a0a0d;border:1px solid rgba(255,255,255,.07);overflow:hidden">
+        <div style="position:absolute;inset:0;background-image:repeating-linear-gradient(0deg,transparent 0 21px,rgba(255,255,255,.035) 21px 22px),repeating-linear-gradient(90deg,transparent 0 25px,rgba(255,255,255,.035) 25px 26px)"></div>
+        <div style="position:absolute;top:44%;left:-8%;width:116%;height:1px;background:rgba(167,139,250,.22);transform:rotate(-14deg)"></div>
+        <span style="position:absolute;left:28%;top:34%;width:4px;height:4px;background:#7c6bb0;border-radius:50%"></span><span style="position:absolute;left:70%;top:60%;width:4px;height:4px;background:#7c6bb0;border-radius:50%"></span>
+        <div style="position:absolute;left:52%;top:48%;transform:translate(-50%,-50%);width:12px;height:12px"><span style="position:absolute;inset:0;border-radius:50%;background:#A78BFA;opacity:.4;animation:pulse 2s ease-out infinite"></span><span style="position:absolute;left:3px;top:3px;width:6px;height:6px;border-radius:50%;background:#A78BFA;box-shadow:0 0 10px #A78BFA"></span></div>
+        <div style="position:absolute;top:8px;left:10px;font-size:9px;color:#A78BFA">◉ you · inokashira</div>
+      </div>
+      <div style="font-size:10px;color:#54545e;margin-top:14px;line-height:1.7">dark ink + faint grid "roads" + purple trail. Muted dots for points, one pulsing accent for the live position. Full-bleed on Map, boxed on other screens.</div>
+    </div>
+
+    <!-- search bar -->
+    <div style="border:1px solid rgba(255,255,255,.08);padding:16px 16px 18px"><div style="font-size:10px;letter-spacing:.14em;color:#6a6a74;margin-bottom:14px">SEARCH FIELD</div>
+      <div style="display:flex;align-items:center;gap:9px;background:#0c0c10;border:1px solid rgba(255,255,255,.14);padding:12px 14px;font-size:12px;color:#6a6a74"><span style="color:#A78BFA">&gt;</span><span>search places</span><span style="width:7px;height:14px;background:#A78BFA;animation:caret 1s steps(1) infinite;margin-left:-2px"></span><span style="margin-left:auto;color:#45454e;font-size:10px;letter-spacing:.1em">⏎ find</span></div>
+      <div style="font-size:10px;color:#54545e;margin-top:14px;line-height:1.7">one reusable component: <span style="color:#A78BFA">&gt;</span> prompt · placeholder · blinking caret · ⏎ hint. Pinned to the bottom on Places &amp; Check-In.</div>
+    </div>
+
+    <!-- toggle + segmented -->
+    <div style="border:1px solid rgba(255,255,255,.08);padding:16px 16px 18px"><div style="font-size:10px;letter-spacing:.14em;color:#6a6a74;margin-bottom:14px">TOGGLE &amp; SEGMENTED</div>
+      <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:13px">enable tracking</span><div style="width:40px;height:20px;border:1px solid #A78BFA;background:rgba(167,139,250,.15);position:relative;flex:none"><div style="position:absolute;top:1px;right:1px;width:16px;height:16px;background:#A78BFA;box-shadow:0 0 8px rgba(167,139,250,.6)"></div></div></div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);border:1px solid rgba(255,255,255,.14);margin-top:14px"><div style="text-align:center;padding:9px 0;font-size:11px;color:#5c5c66;border-right:1px solid rgba(255,255,255,.1)">eco</div><div style="text-align:center;padding:9px 0;font-size:11px;color:#A78BFA;background:rgba(167,139,250,.1);border-right:1px solid rgba(255,255,255,.1)">balanced</div><div style="text-align:center;padding:9px 0;font-size:11px;color:#5c5c66">max</div></div>
+      <div style="font-size:10px;color:#54545e;margin-top:14px;line-height:1.7">square toggle (purple knob when on); segmented control for enumerations, active cell filled purple.</div>
+    </div>
+
+    <!-- status tokens + buttons -->
+    <div style="border:1px solid rgba(255,255,255,.08);padding:16px 16px 18px"><div style="font-size:10px;letter-spacing:.14em;color:#6a6a74;margin-bottom:14px">STATUS TOKENS &amp; BUTTONS</div>
+      <div style="display:flex;gap:18px;font-size:10px;letter-spacing:.08em"><span style="color:#8a8a94"><span style="color:#A78BFA">▪</span> granted</span><span style="color:#d0a24c">▪ initializing…</span><span style="color:#8a8a94"><span style="color:#54545e">▪</span> disabled</span></div>
+      <div style="display:flex;gap:9px;margin-top:16px;flex-wrap:wrap">
+        <button style="font-family:inherit;font-size:11px;color:#A78BFA;background:rgba(167,139,250,.1);border:1px solid #A78BFA;padding:9px 14px;cursor:pointer">primary</button>
+        <button style="font-family:inherit;font-size:11px;color:#c9c9d0;background:none;border:1px solid rgba(255,255,255,.18);padding:9px 14px;cursor:pointer">neutral</button>
+        <button style="font-family:inherit;font-size:11px;color:#d06a6a;background:none;border:1px solid rgba(208,106,106,.4);padding:9px 14px;cursor:pointer">delete</button>
+      </div>
+      <div style="font-size:10px;color:#54545e;margin-top:14px;line-height:1.7">state = ▪ + lowercase token (purple ok · amber pending · faint off). Buttons: primary (purple fill-tint), neutral (hairline), destructive (red hairline). All square.</div>
+    </div>
+
+  </div>
+
+  <!-- §06 MOTION -->
+  <div style="display:flex;align-items:baseline;gap:12px;margin:64px 0 24px"><span style="font-size:11px;color:#A78BFA;letter-spacing:.1em">§06</span><span style="font-size:13px;letter-spacing:.22em">MOTION</span><span style="flex:1;height:1px;background:rgba(255,255,255,.09)"></span><span style="font-size:10px;color:#54545e">on load · replayable</span></div>
+  <div style="border:1px solid rgba(255,255,255,.08)">
+    <div style="display:grid;grid-template-columns:150px 1fr 190px;font-size:10px;letter-spacing:.12em;color:#6a6a74;padding:12px 18px;border-bottom:1px solid rgba(255,255,255,.09)"><span>TOKEN</span><span>BEHAVIOUR</span><span>TIMING</span></div>
+    <div style="display:grid;grid-template-columns:150px 1fr 190px;font-size:11px;color:#8a8a94;padding:13px 18px;border-bottom:1px solid rgba(255,255,255,.05)"><span style="color:#e6e6ea">barDraw</span><span>bars scale in from the left edge, staggered</span><span style="color:#6a6a74">.8s · (.16,1,.3,1) · +.06s</span></div>
+    <div style="display:grid;grid-template-columns:150px 1fr 190px;font-size:11px;color:#8a8a94;padding:13px 18px;border-bottom:1px solid rgba(255,255,255,.05)"><span style="color:#e6e6ea">riseIn</span><span>rows &amp; cards fade up 7px, staggered</span><span style="color:#6a6a74">.5s · ease · +.06s</span></div>
+    <div style="display:grid;grid-template-columns:150px 1fr 190px;font-size:11px;color:#8a8a94;padding:13px 18px;border-bottom:1px solid rgba(255,255,255,.05)"><span style="color:#e6e6ea">decrypt</span><span>titles &amp; key readouts scramble → resolve</span><span style="color:#6a6a74">~45ms/frame char reveal</span></div>
+    <div style="display:grid;grid-template-columns:150px 1fr 190px;font-size:11px;color:#8a8a94;padding:13px 18px;border-bottom:1px solid rgba(255,255,255,.05)"><span style="color:#e6e6ea">pulse</span><span>ring expands out from the live map position</span><span style="color:#6a6a74">2s · ease-out · loop</span></div>
+    <div style="display:grid;grid-template-columns:150px 1fr 190px;font-size:11px;color:#8a8a94;padding:13px 18px"><span style="color:#e6e6ea">caret / blink</span><span>search caret &amp; tracking dot</span><span style="color:#6a6a74">1–1.4s · steps</span></div>
+  </div>
+  <div style="margin-top:14px;font-size:11px;color:#7a7a84;line-height:1.7">Everything animates once on view load and is replayable. Motion is sharp and mechanical — no bounce, no easing overshoot beyond the draw curve. It should read like a terminal booting, not a consumer app.</div>
+
+  <!-- §07 DESKTOP WEB -->
+  <div style="display:flex;align-items:baseline;gap:12px;margin:64px 0 24px"><span style="font-size:11px;color:#A78BFA;letter-spacing:.1em">§07</span><span style="font-size:13px;letter-spacing:.22em">DESKTOP WEB</span><span style="flex:1;height:1px;background:rgba(255,255,255,.09)"></span><span style="font-size:10px;color:#54545e">sidebar · columns · breakpoints</span></div>
+  <div style="font-size:12px;color:#7a7a84;line-height:1.7;max-width:680px;margin-bottom:22px">The same tokens, type and components carry to the browser. The change is spatial, not stylistic: the bottom tab bar becomes a left sidebar, the single mobile column becomes a fixed nav plus a fluid content region, and horizontal space is spent on parallel panels rather than stacked scroll. No new colors, no rounded corners, no shadows introduced for desktop.</div>
+
+  <!-- desktop app-shell mock -->
+  <div style="border:1px solid rgba(255,255,255,.08);height:400px;display:flex;overflow:hidden">
+    <!-- sidebar -->
+    <div style="width:186px;flex:none;border-right:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;background:#0a0a0d">
+      <div style="padding:18px 16px;border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:center;gap:9px;font-size:11px;letter-spacing:.14em"><span style="width:8px;height:8px;background:#A78BFA;box-shadow:0 0 8px #A78BFA;flex:none"></span>WANDERLOOP</div>
+      <div style="display:flex;flex-direction:column;padding:8px 0">
+        <div style="display:flex;align-items:center;gap:12px;padding:11px 16px;font-size:11px;letter-spacing:.06em;color:#8a8a94;position:relative"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"><path d="M3 7l6 -3l6 3l6 -3v13l-6 3l-6 -3l-6 3z"/><path d="M9 4v13"/><path d="M15 7v13"/></svg>map</div>
+        <div style="display:flex;align-items:center;gap:12px;padding:11px 16px;font-size:11px;letter-spacing:.06em;color:#8a8a94"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"><path d="M12 8v4l2 2"/><path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5"/></svg>timeline</div>
+        <div style="display:flex;align-items:center;gap:12px;padding:11px 16px;font-size:11px;letter-spacing:.06em;color:#A78BFA;background:rgba(167,139,250,.08);border-left:2px solid #A78BFA"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"><path d="M9 11a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/><path d="M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z"/></svg>places</div>
+        <div style="display:flex;align-items:center;gap:12px;padding:11px 16px;font-size:11px;letter-spacing:.06em;color:#8a8a94"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z"/><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/></svg>config</div>
+      </div>
+      <div style="margin-top:auto;padding:14px 16px;border-top:1px solid rgba(255,255,255,.06);font-size:9px;letter-spacing:.1em;color:#54545e"><span style="color:#A78BFA">▪</span> tracking · on</div>
+    </div>
+    <!-- content region -->
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+      <!-- top rail -->
+      <div style="display:flex;align-items:baseline;justify-content:space-between;padding:16px 22px;border-bottom:1px solid rgba(255,255,255,.08)"><span style="font-size:20px;font-weight:600;letter-spacing:.05em">PLACES</span><span style="font-size:10px;color:#6a6a74;letter-spacing:.06em">saved · <span style="color:#9a9aa4">24</span> · tokyo, jp</span></div>
+      <!-- two-column body -->
+      <div style="flex:1;display:grid;grid-template-columns:1fr 1.3fr;min-height:0">
+        <!-- list column -->
+        <div style="border-right:1px solid rgba(255,255,255,.08);padding:16px 20px;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.16em;color:#6a6a74;margin-bottom:16px"><span>SAVED</span><span style="flex:1;height:1px;background:rgba(255,255,255,.08)"></span><span>most visited</span></div>
+          <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:16px"><span style="width:9px;height:9px;border-radius:50%;background:#A78BFA;box-shadow:0 0 8px rgba(167,139,250,.6);margin-top:5px;flex:none"></span><div style="flex:1;min-width:0"><div style="font-size:13px">inokashira park</div><div style="font-size:10px;color:#54545e;margin-top:3px">park · gotenyama</div></div><div style="font-size:11px;color:#A78BFA;flex:none">61</div></div>
+          <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:16px"><span style="width:9px;height:9px;border-radius:50%;border:1px solid #54545e;margin-top:5px;flex:none"></span><div style="flex:1;min-width:0"><div style="font-size:13px">blue bottle roppongi</div><div style="font-size:10px;color:#54545e;margin-top:3px">cafe · minato</div></div><div style="font-size:11px;color:#9a9aa4;flex:none">43</div></div>
+          <div style="display:flex;align-items:flex-start;gap:12px"><span style="width:9px;height:9px;border-radius:50%;border:1px solid #54545e;margin-top:5px;flex:none"></span><div style="flex:1;min-width:0"><div style="font-size:13px">shibuya crossing</div><div style="font-size:10px;color:#54545e;margin-top:3px">landmark · shibuya</div></div><div style="font-size:11px;color:#9a9aa4;flex:none">29</div></div>
+        </div>
+        <!-- map column -->
+        <div style="position:relative;background:#0a0a0d;overflow:hidden">
+          <div style="position:absolute;inset:0;background-image:repeating-linear-gradient(0deg,transparent 0 24px,rgba(255,255,255,.03) 24px 25px),repeating-linear-gradient(90deg,transparent 0 28px,rgba(255,255,255,.03) 28px 29px)"></div>
+          <div style="position:absolute;top:40%;left:-10%;width:120%;height:1px;background:rgba(167,139,250,.2);transform:rotate(-8deg)"></div>
+          <span style="position:absolute;left:32%;top:38%;width:4px;height:4px;background:#7c6bb0;border-radius:50%"></span><span style="position:absolute;left:64%;top:64%;width:4px;height:4px;background:#7c6bb0;border-radius:50%"></span>
+          <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:12px;height:12px"><span style="position:absolute;inset:0;border-radius:50%;background:#A78BFA;opacity:.4;animation:pulse 2s ease-out infinite"></span><span style="position:absolute;left:3px;top:3px;width:6px;height:6px;border-radius:50%;background:#A78BFA;box-shadow:0 0 10px #A78BFA"></span></div>
+          <div style="position:absolute;top:10px;left:12px;font-size:9px;color:#A78BFA">◉ you · inokashira</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="font-size:10px;color:#54545e;margin-top:12px;line-height:1.7">Desktop app shell · <span style="color:#7a7a84">186px sidebar</span> (icon + label, active item gets accent left-rule and tint) │ <span style="color:#7a7a84">top rail</span> holds the screen title + readout that mobile stacks under the status bar │ <span style="color:#7a7a84">content columns</span> replace vertical stacking — list beside a persistent map. Same list row, section label, marker and map-panel components, re-laid-out.</div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px">
+    <div style="border:1px solid rgba(255,255,255,.08);padding:18px">
+      <div style="font-size:10px;letter-spacing:.14em;color:#6a6a74;margin-bottom:14px">BREAKPOINTS</div>
+      <div style="display:flex;flex-direction:column;gap:0">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:#8a8a94;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.05)"><span style="color:#e6e6ea">mobile</span><span style="color:#6a6a74">&lt; 720 · 1 col · tab bar</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:#8a8a94;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.05)"><span style="color:#e6e6ea">tablet</span><span style="color:#6a6a74">720–1120 · rail sidebar · 1–2 col</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:#8a8a94;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.05)"><span style="color:#e6e6ea">desktop</span><span style="color:#6a6a74">1120–1600 · sidebar · 2 col</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:#8a8a94;padding:9px 0"><span style="color:#e6e6ea">wide</span><span style="color:#6a6a74">&gt; 1600 · content capped · 3 col</span></div>
+      </div>
+      <div style="font-size:10px;color:#54545e;margin-top:14px;line-height:1.7">Content region caps at ~1440px and centers; the sidebar stays pinned at the viewport edge. Map panels are the elastic element — they absorb extra width.</div>
+    </div>
+    <div style="border:1px solid rgba(255,255,255,.08);padding:18px">
+      <div style="font-size:10px;letter-spacing:.14em;color:#6a6a74;margin-bottom:14px">NAV · MOBILE → DESKTOP</div>
+      <div style="font-size:11px;color:#8a8a94;line-height:1.9"><span style="color:#6a6a74">tab bar</span> (bottom, 4–5 icons, label under) becomes<br><span style="color:#A78BFA">sidebar</span> (left, 186px, icon + label inline)</div>
+      <div style="font-size:11px;color:#8a8a94;line-height:1.9;margin-top:12px">active state — mobile: accent icon + <span style="color:#7a7a84">top rule</span>. desktop: accent icon + label + <span style="color:#7a7a84">left rule</span> + faint tint.</div>
+      <div style="font-size:11px;color:#8a8a94;line-height:1.9;margin-top:12px"><span style="color:#6a6a74">bottom search</span> (pinned) becomes an <span style="color:#A78BFA">inline field</span> in the top rail or list column — same <span style="color:#A78BFA">&gt;</span> prompt + caret component.</div>
+    </div>
+  </div>
+
+  <div style="font-size:11px;color:#7a7a84;line-height:1.7;margin-top:20px;max-width:680px">Hover — desktop-only — uses the faintest hairline: rows and nav items lift to <span style="color:#9a9aa4">rgba(255,255,255,.04)</span> background on hover, never a color change. Keyboard focus draws a 1px <span style="color:#A78BFA">accent</span> outline. Touch targets stay ≥44px on mobile; desktop rows can compress to 36px.</div>
+
+  <!-- §08 PRODUCT FAMILY -->
+  <div style="display:flex;align-items:baseline;gap:12px;margin:64px 0 24px"><span style="font-size:11px;color:#A78BFA;letter-spacing:.1em">§08</span><span style="font-size:13px;letter-spacing:.22em">PRODUCT FAMILY</span><span style="flex:1;height:1px;background:rgba(255,255,255,.09)"></span><span style="font-size:10px;color:#54545e">shared core · per-app surface</span></div>
+  <div style="font-size:12px;color:#7a7a84;line-height:1.7;max-width:680px;margin-bottom:22px">Wanderloop is a family, not one app. Every product draws from the same core — tokens, Spline Sans Mono, the single purple accent, hairline structure, Tabler nav icons and the component set. What differs per app is which screens exist and how the core is composed. The accent hue is the one lever a product may retune to distinguish itself; everything else is fixed.</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.07)">
+    <div style="background:#08080a;padding:18px"><div style="display:flex;align-items:center;gap:8px;font-size:12px"><span style="width:7px;height:7px;background:#A78BFA;box-shadow:0 0 8px #A78BFA"></span>Check-In</div><div style="font-size:10px;color:#54545e;margin-top:4px">#A78BFA · purple</div><div style="font-size:10px;color:#8a8a94;margin-top:10px;line-height:1.7">the flagship — map, timeline, places, check-in. Reference implementation of the system.</div></div>
+    <div style="background:#08080a;padding:18px"><div style="display:flex;align-items:center;gap:8px;font-size:12px"><span style="width:7px;height:7px;background:#6bb0a0;box-shadow:0 0 8px #6bb0a0"></span>Atlas</div><div style="font-size:10px;color:#54545e;margin-top:4px">#6BB0A0 · teal</div><div style="font-size:10px;color:#8a8a94;margin-top:10px;line-height:1.7">shared trips &amp; group location. Desktop-first planning board, mobile companion.</div></div>
+    <div style="background:#08080a;padding:18px"><div style="display:flex;align-items:center;gap:8px;font-size:12px"><span style="width:7px;height:7px;background:#d0a24c;box-shadow:0 0 8px #d0a24c"></span>Timeline</div><div style="font-size:10px;color:#54545e;margin-top:4px">#D0A24C · amber</div><div style="font-size:10px;color:#8a8a94;margin-top:10px;line-height:1.7">personal history &amp; stats. Histogram + spine components take the lead role.</div></div>
+    <div style="background:#08080a;padding:18px"><div style="display:flex;align-items:center;gap:8px;font-size:12px"><span style="width:7px;height:7px;border:1px solid #54545e;border-radius:50%"></span>future</div><div style="font-size:10px;color:#54545e;margin-top:4px">pick 1 accent hue</div><div style="font-size:10px;color:#8a8a94;margin-top:10px;line-height:1.7">new products inherit the core verbatim and choose a single accent at the same chroma/lightness.</div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px">
+    <div style="border:1px solid rgba(255,255,255,.08);padding:18px">
+      <div style="font-size:10px;letter-spacing:.14em;color:#6a6a74;margin-bottom:12px">FIXED ACROSS THE FAMILY</div>
+      <div style="font-size:11px;color:#8a8a94;line-height:1.9">base + surface + text tokens · Spline Sans Mono · casing rule · hairline weights · no rounded corners · Tabler nav icons · component set · motion tokens</div>
+    </div>
+    <div style="border:1px solid rgba(255,255,255,.08);padding:18px">
+      <div style="font-size:10px;letter-spacing:.14em;color:#6a6a74;margin-bottom:12px">CHOSEN PER APP</div>
+      <div style="font-size:11px;color:#8a8a94;line-height:1.9">accent hue (one, fixed L/C) · which screens exist · which components lead · nav item set · default platform emphasis (mobile vs desktop)</div>
+    </div>
+  </div>
+
+  <div style="margin-top:64px;padding-top:20px;border-top:1px solid rgba(255,255,255,.09);display:flex;justify-content:space-between;font-size:10px;color:#45454e;letter-spacing:.08em"><span>WANDERLOOP · DESIGN SYSTEM v2.0</span><span>mobile + desktop web · product family · sharp / airy / sparing</span></div>
+
+</div>
+
+<template id="__bundler_thumbnail" data-bg-color="#08080a">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#08080a"/>
+    <g stroke="#A78BFA" stroke-width="10" fill="none" stroke-linecap="square" stroke-linejoin="miter">
+      <rect x="480" y="300" width="240" height="240"/>
+      <path d="M540 420 l50 50 l90 -110"/>
+    </g>
+    <rect x="470" y="590" width="260" height="12" fill="#A78BFA"/>
+    <rect x="470" y="616" width="180" height="12" fill="#3a3a44"/>
+  </svg>
+</template>
+</x-dc>
+</body>
+</html>

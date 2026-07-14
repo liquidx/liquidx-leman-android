@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spline+Sans+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#050507;font-family:'Spline Sans Mono',ui-monospace,monospace;-webkit-font-smoothing:antialiased;color:#e6e6ea}
+  a{color:#6BA0D8;text-decoration:none}
+  a:hover{color:#9cc2ec}
+  ::-webkit-scrollbar{width:4px}
+  ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12)}
+  ::-webkit-scrollbar-track{background:transparent}
+  input{font-family:'Spline Sans Mono',ui-monospace,monospace}
+  @keyframes barDraw{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+  @keyframes riseIn{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+  @keyframes caret{0%,49%{opacity:1}50%,100%{opacity:0}}
+  @keyframes pulse{0%{transform:scale(.5);opacity:.8}100%{transform:scale(2.6);opacity:0}}
+  .dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(255,255,255,.08);scroll-margin-top:16px}
+  .dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 24px}
+  .dv-tid{font-size:10px;font-weight:600;padding:3px 8px;background:#6BA0D8;color:#08080a;letter-spacing:.12em}
+  .dv-tname{font-size:13px;font-weight:600;letter-spacing:.06em;color:#e6e6ea}
+  .dv-opts{display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start}
+  .dv-opt{flex:none;display:flex;flex-direction:column;gap:10px;scroll-margin-top:16px}
+  .dv-oid{font-size:10.5px;font-weight:600;padding:3px 7px;background:rgba(107,160,216,.15);color:#6BA0D8;text-decoration:none}
+  .dv-oid:hover{color:#9cc2ec}
+  .dv-olabel{display:flex;align-items:baseline;gap:9px;font-size:11px;color:#7a7a84}
+  .dv-opt:target .dv-oid{background:#6BA0D8;color:#08080a}
+  .dv-next{margin:26px 0 0;font-size:11px;line-height:1.6;color:#54545e}
+</style>
+</helmet>
+
+<section class="dv-turn" id="t2">
+  <div class="dv-thd"><a class="dv-tid" href="#t2">2</a><span class="dv-tname">Refinements — <a class="dv-oid" href="#1a">1a</a> rows + <a class="dv-oid" href="#1b">1b</a> day headers · agent identity · trimmed new-thread &amp; config</span></div>
+  <div class="dv-opts">
+
+    <!-- ============ 2a THREAD LIST · merged ============ -->
+    <div class="dv-opt" id="2a">
+      <div class="dv-olabel"><a class="dv-oid" href="#2a">2a</a>thread list — 1a rows · day headers · filter scrolls with list</div>
+      <div data-screen-label="2a thread list" style="width:380px;height:788px;border:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;overflow:hidden;background:#08080a">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 18px 0;font-size:9px;letter-spacing:.1em;color:#54545e"><span>09:41</span><span><span style="color:#6BA0D8">▪</span> hermes · connected</span></div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;padding:14px 18px 0"><span style="font-size:23px;font-weight:600;letter-spacing:.05em">THREADS</span><span style="font-size:10px;color:#6a6a74">{{ listCount2 }} · <span style="color:#6BA0D8">1 running</span></span></div>
+        <div style="margin:14px 18px 0;height:9px;background-image:repeating-linear-gradient(90deg,rgba(255,255,255,.16) 0 1px,transparent 1px 24px);border-bottom:1px solid rgba(255,255,255,.09)"></div>
+        <div style="flex:1;overflow-y:auto;padding:0 18px 8px">
+          <div style="display:flex;align-items:center;gap:9px;padding:13px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:12px"><span style="color:#6BA0D8">&gt;</span><input value="{{ q2 }}" onChange="{{ onQ2 }}" placeholder="filter threads" style="flex:1;background:none;border:none;outline:none;color:#e6e6ea;font-size:12px;min-width:0"></input><span style="color:#3f3f48;font-size:10px;letter-spacing:.1em;flex:none">⏎ find</span></div>
+          <sc-for list="{{ groups2 }}" as="g" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.16em;color:#6a6a74;margin-top:18px;margin-bottom:4px"><span>{{ g.label }}</span><span style="color:#54545e">·</span><span style="color:#9a9aa4">{{ g.count }}</span><span style="flex:1;height:1px;background:rgba(255,255,255,.08)"></span><span style="letter-spacing:0;color:#54545e">{{ g.right }}</span></div>
+            <sc-for list="{{ g.items }}" as="th" hint-placeholder-count="3">
+              <div onClick="{{ th.togglePin }}" style="display:flex;align-items:flex-start;gap:13px;padding:13px 0;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer">
+                <div style="flex:none;width:9px;margin-top:5px;position:relative">
+                  <sc-if value="{{ th.running }}"><span style="position:absolute;left:0;top:0;width:9px;height:9px;border-radius:50%;background:#6BA0D8;opacity:.4;animation:pulse 2s ease-out infinite"></span></sc-if>
+                  <span style="display:block;width:9px;height:9px;border-radius:50%;background:{{ th.dotBg }};border:1px solid {{ th.dotBorder }};box-shadow:{{ th.dotGlow }}"></span>
+                </div>
+                <div style="flex:1;min-width:0">
+                  <div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:{{ th.titleColor }}">{{ th.title }}</span><sc-if value="{{ th.unread }}"><span style="flex:none;width:5px;height:5px;background:#6BA0D8;box-shadow:0 0 6px rgba(107,160,216,.7)"></span></sc-if></div>
+                  <div style="font-size:11px;color:#7a7a84;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ th.preview }}</div>
+                  <div style="display:flex;gap:7px;margin-top:5px;font-size:10px"><span style="color:{{ th.stateColor }}">▪ {{ th.state }}</span><span style="color:#3a3a44">·</span><span style="color:#54545e">{{ th.time }}</span></div>
+                </div>
+                <span style="flex:none;font-size:10px;color:{{ th.pinColor }};margin-top:4px">{{ th.pinGlyph }}</span>
+              </div>
+            </sc-for>
+          </sc-for>
+          <sc-if value="{{ noResults2 }}"><div style="padding:28px 0;font-size:11px;color:#54545e;text-align:center">no threads match "{{ q2 }}"</div></sc-if>
+        </div>
+        <div style="padding:12px 18px;border-top:1px solid rgba(255,255,255,.06)">
+          <div style="display:flex;align-items:center;gap:9px;background:#0c0c10;border:1px solid #6BA0D8;padding:11px 13px;font-size:12px;color:#6a6a74"><span style="color:#6BA0D8">&gt;</span><span>new thread</span><span style="width:7px;height:14px;background:#6BA0D8;animation:caret 1s steps(1) infinite;margin-left:-2px"></span><span style="margin-left:auto;color:#45454e;font-size:10px;letter-spacing:.1em">⏎ start</span></div>
+        </div>
+        <div style="display:flex;border-top:1px solid rgba(255,255,255,.08);background:#0a0a0d">
+          <div style="position:relative;flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 0 12px;font-size:9px;letter-spacing:.1em;color:#6BA0D8"><span style="position:absolute;left:0;right:0;top:0;height:2px;background:#6BA0D8"></span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"><path d="M8 9h8"></path><path d="M8 13h6"></path><path d="M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1 -3 3h-5l-5 3v-3h-2a3 3 0 0 1 -3 -3v-8a3 3 0 0 1 3 -3h12z"></path></svg>threads</div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 0 12px;font-size:9px;letter-spacing:.1em;color:#5c5c66"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z"></path><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"></path></svg>config</div>
+        </div>
+      </div>
+      <div style="font-size:10px;color:#54545e;max-width:380px;line-height:1.7">filter is the first row of the list and scrolls away with it. Pinned fold on top, then day headers with the count folded into the rule. New-thread field (accent border, from <a class="dv-oid" href="#1b">1b</a>) pinned at bottom. Tab bar trimmed to threads / config.</div>
+    </div>
+
+    <!-- ============ 2b THREAD VIEW · session log + agent identity ============ -->
+    <div class="dv-opt" id="2b">
+      <div class="dv-olabel"><a class="dv-oid" href="#2b">2b</a>thread view — 1d log · named agent per thread</div>
+      <div data-screen-label="2b thread view" style="width:380px;height:788px;border:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;overflow:hidden;background:#08080a">
+        <div style="display:flex;align-items:center;gap:11px;padding:13px 18px;border-bottom:1px solid rgba(255,255,255,.08)">
+          <span style="color:#8a8a94;font-size:16px;cursor:pointer">‹</span>
+          <span style="flex:none;width:22px;height:22px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(107,160,216,.5);background:rgba(107,160,216,.08);color:#6BA0D8;font-size:11px">✳</span>
+          <div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">fix flaky ci pipeline</div><div style="font-size:9px;color:#54545e;letter-spacing:.08em;margin-top:2px">▪ DONE · <span style="color:#8a8a94">juno</span> · ops profile</div></div>
+          <span style="font-size:11px;color:#6BA0D8;cursor:pointer">◆</span>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:16px 18px 10px">
+
+          <div style="display:flex;gap:12px;margin-bottom:16px">
+            <span style="flex:none;width:34px;font-size:9px;color:#3f3f48;text-align:right;padding-top:3px">21:40</span>
+            <div style="flex:1;min-width:0;border-left:2px solid #6BA0D8;padding-left:12px">
+              <div style="font-size:9px;letter-spacing:.14em;color:#54545e;margin-bottom:5px">YOU</div>
+              <div style="font-size:12px;line-height:1.65">the e2e suite on main keeps failing ~1 in 4 runs. find the flaky test and fix it</div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:12px;margin-bottom:6px">
+            <span style="flex:none;width:34px;font-size:9px;color:#3f3f48;text-align:right;padding-top:3px">21:41</span>
+            <div onClick="{{ tg.b1 }}" style="flex:1;min-width:0;cursor:pointer;font-size:10px;color:#54545e;display:flex;align-items:center;gap:8px" style-hover="color:#7a7a84"><span style="color:#3f3f48">{{ b1Arrow }}</span><span>trace · 9 steps · ci.logs ×3 · repo.search ×2 · 3m 12s</span></div>
+          </div>
+          <sc-if value="{{ open.b1 }}" hint-placeholder-val="{{ false }}">
+            <div style="margin:4px 0 14px 46px;border:1px solid rgba(255,255,255,.07);background:#0c0c10;animation:riseIn .3s ease both">
+              <div style="display:flex;gap:10px;padding:9px 12px;border-bottom:1px solid rgba(255,255,255,.05)"><span style="flex:none;font-size:9px;color:#5b7ea6;width:74px">ci.logs</span><div style="flex:1;min-width:0;font-size:10px;color:#7a7a84;line-height:1.6">last 40 runs on main <span style="color:#54545e">→ 11 failures, all in checkout.spec</span></div></div>
+              <div style="display:flex;gap:10px;padding:9px 12px;border-bottom:1px solid rgba(255,255,255,.05)"><span style="flex:none;font-size:9px;color:#7a7a84;width:74px">reasoning</span><div style="flex:1;min-width:0;font-size:10px;color:#7a7a84;line-height:1.6">failures cluster on parallel shards → suspect shared state</div></div>
+              <div style="display:flex;gap:10px;padding:9px 12px;border-bottom:1px solid rgba(255,255,255,.05)"><span style="flex:none;font-size:9px;color:#5b7ea6;width:74px">repo.search</span><div style="flex:1;min-width:0;font-size:10px;color:#7a7a84;line-height:1.6">"beforeAll" in e2e/checkout <span style="color:#54545e">→ fixture seeds db without tx isolation</span></div></div>
+              <div style="display:flex;gap:10px;padding:9px 12px;border-bottom:1px solid rgba(255,255,255,.05)"><span style="flex:none;font-size:9px;color:#5b7ea6;width:74px">ci.rerun</span><div style="flex:1;min-width:0;font-size:10px;color:#7a7a84;line-height:1.6">checkout.spec ×20 isolated <span style="color:#54545e">→ 0 failures with fix applied</span></div></div>
+              <div style="display:flex;gap:10px;padding:9px 12px"><span style="flex:none;font-size:9px;color:#7a7a84;width:74px">reasoning</span><div style="flex:1;min-width:0;font-size:10px;color:#7a7a84;line-height:1.6">confident in root cause · preparing patch + pr</div></div>
+            </div>
+          </sc-if>
+
+          <div style="display:flex;gap:12px;margin-bottom:16px">
+            <span style="flex:none;width:34px;font-size:9px;color:#3f3f48;text-align:right;padding-top:3px">21:44</span>
+            <div style="flex:1;min-width:0;border-left:2px solid rgba(255,255,255,.12);padding-left:12px">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px"><span style="font-size:9px;letter-spacing:.14em;color:#6BA0D8">JUNO</span></div>
+              <div style="font-size:12px;line-height:1.7;color:#c9c9d0">found it. <span style="color:#e6e6ea">checkout.spec</span> seeds the db in a <span style="color:#e6e6ea">beforeAll</span> without transaction isolation — parallel shards race on the same rows. patch:</div>
+              <div style="margin-top:10px;background:#0c0c10;border:1px solid rgba(255,255,255,.08)">
+                <div style="display:flex;justify-content:space-between;padding:7px 12px;border-bottom:1px solid rgba(255,255,255,.06);font-size:9px;color:#54545e;letter-spacing:.08em"><span>e2e/checkout.spec.ts</span><span style="color:#6BA0D8;cursor:pointer">copy</span></div>
+                <div style="padding:11px 12px;font-size:10.5px;line-height:1.75;overflow-x:auto"><div style="color:#d06a6a">- beforeAll(() =&gt; seedDb())</div><div style="color:#6bb08a">+ beforeEach(() =&gt; seedDb({ isolate: true }))</div><div style="color:#6bb08a">+ afterEach(() =&gt; rollback())</div></div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:7px;margin-top:12px;font-size:11px">
+                <div style="display:flex;gap:9px;color:#8a8a94"><span style="color:#6BA0D8">▪</span>reproduced · 11/40 runs failing</div>
+                <div style="display:flex;gap:9px;color:#8a8a94"><span style="color:#6BA0D8">▪</span>patched fixture isolation</div>
+                <div style="display:flex;gap:9px;color:#8a8a94"><span style="color:#6BA0D8">▪</span>verified ×20 clean reruns</div>
+                <div style="display:flex;gap:9px;color:#8a8a94"><span style="color:#6BA0D8">▪</span>pr #482 opened → merged</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:12px;margin-bottom:16px">
+            <span style="flex:none;width:34px;font-size:9px;color:#3f3f48;text-align:right;padding-top:3px">22:02</span>
+            <div style="flex:1;min-width:0;border-left:2px solid #6BA0D8;padding-left:12px">
+              <div style="font-size:9px;letter-spacing:.14em;color:#54545e;margin-bottom:5px">YOU</div>
+              <div style="font-size:12px;line-height:1.65">nice. watch the next 20 runs and reopen if it recurs</div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:12px;margin-bottom:6px">
+            <span style="flex:none;width:34px;font-size:9px;color:#3f3f48;text-align:right;padding-top:3px">22:03</span>
+            <div onClick="{{ tg.b2 }}" style="flex:1;min-width:0;cursor:pointer;font-size:10px;color:#54545e;display:flex;align-items:center;gap:8px" style-hover="color:#7a7a84"><span style="color:#3f3f48">{{ b2Arrow }}</span><span>trace · 2 steps · monitor scheduled</span></div>
+          </div>
+          <sc-if value="{{ open.b2 }}" hint-placeholder-val="{{ false }}">
+            <div style="margin:4px 0 14px 46px;border:1px solid rgba(255,255,255,.07);background:#0c0c10;animation:riseIn .3s ease both">
+              <div style="display:flex;gap:10px;padding:9px 12px;border-bottom:1px solid rgba(255,255,255,.05)"><span style="flex:none;font-size:9px;color:#5b7ea6;width:74px">monitor.add</span><div style="flex:1;min-width:0;font-size:10px;color:#7a7a84;line-height:1.6">watch e2e on main · 20 runs · alert on failure</div></div>
+              <div style="display:flex;gap:10px;padding:9px 12px"><span style="flex:none;font-size:9px;color:#7a7a84;width:74px">reasoning</span><div style="flex:1;min-width:0;font-size:10px;color:#7a7a84;line-height:1.6">will reopen this thread automatically if the monitor fires</div></div>
+            </div>
+          </sc-if>
+
+          <div style="display:flex;gap:12px">
+            <span style="flex:none;width:34px;font-size:9px;color:#3f3f48;text-align:right;padding-top:3px">22:03</span>
+            <div style="flex:1;min-width:0;border-left:2px solid rgba(255,255,255,.12);padding-left:12px">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px"><span style="font-size:9px;letter-spacing:.14em;color:#6BA0D8">JUNO</span></div>
+              <div style="font-size:12px;line-height:1.65;color:#c9c9d0">watching the next 20 runs — i'll reopen this thread if it fails again. <span style="color:#54545e">monitor #m-31 active</span></div>
+            </div>
+          </div>
+
+        </div>
+        <div style="padding:12px 18px;border-top:1px solid rgba(255,255,255,.06)">
+          <div style="display:flex;align-items:center;gap:9px;background:#0c0c10;border:1px solid rgba(255,255,255,.14);padding:11px 13px;font-size:12px;color:#6a6a74"><span style="color:#6BA0D8">&gt;</span><span>message juno</span><span style="width:7px;height:14px;background:#6BA0D8;animation:caret 1s steps(1) infinite;margin-left:-2px"></span><span style="margin-left:auto;color:#45454e;font-size:10px;letter-spacing:.1em">⏎ send</span></div>
+        </div>
+      </div>
+      <div style="font-size:10px;color:#54545e;max-width:380px;line-height:1.7">agent identity comes from the thread's profile (api-provided): glyph avatar + name in the header ("juno · ops profile"), <span style="color:#6BA0D8">JUNO</span> / YOU speaker tags on turns, and the composer says "message juno". App stays leman; agent name is configurable in <a class="dv-oid" href="#2d">2d</a>.</div>
+    </div>
+
+    <!-- ============ 2c NEW THREAD · minimal ============ -->
+    <div class="dv-opt" id="2c">
+      <div class="dv-olabel"><a class="dv-oid" href="#2c">2c</a>new thread — text box + start only</div>
+      <div data-screen-label="2c new thread" style="width:380px;height:788px;border:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;overflow:hidden;background:#08080a">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 18px 0;font-size:9px;letter-spacing:.1em;color:#54545e"><span>09:41</span><span><span style="color:#6BA0D8">▪</span> hermes · connected</span></div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;padding:14px 18px 0"><span style="font-size:23px;font-weight:600;letter-spacing:.05em">NEW THREAD</span><span style="font-size:10px;color:#6a6a74;cursor:pointer">esc · cancel</span></div>
+        <div style="margin:14px 18px 0;height:9px;background-image:repeating-linear-gradient(90deg,rgba(255,255,255,.16) 0 1px,transparent 1px 24px);border-bottom:1px solid rgba(255,255,255,.09)"></div>
+        <div style="padding:20px 18px 0">
+          <div style="background:#0c0c10;border:1px solid #6BA0D8;padding:14px;min-height:140px;font-size:13px;line-height:1.65;color:#6a6a74"><span style="color:#6BA0D8">&gt;</span> what should juno do?<span style="display:inline-block;width:7px;height:15px;background:#6BA0D8;animation:caret 1s steps(1) infinite;vertical-align:-2px;margin-left:2px"></span></div>
+          <button style="font-family:inherit;font-size:12px;color:#6BA0D8;background:rgba(107,160,216,.1);border:1px solid #6BA0D8;padding:12px 0;cursor:pointer;width:100%;margin-top:12px;letter-spacing:.06em;white-space:nowrap">start thread ⏎</button>
+        </div>
+      </div>
+      <div style="font-size:10px;color:#54545e;max-width:380px;line-height:1.7">stripped to the essentials: composer + one full-width start button (no wrap, no suggestions, no caption).</div>
+    </div>
+
+    <!-- ============ 2d CONFIG · identity, no agent controls ============ -->
+    <div class="dv-opt" id="2d">
+      <div class="dv-olabel"><a class="dv-oid" href="#2d">2d</a>config — + agent name &amp; avatar · agent section removed</div>
+      <div data-screen-label="2d config" style="width:380px;height:788px;border:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;overflow:hidden;background:#08080a">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 18px 0;font-size:9px;letter-spacing:.1em;color:#54545e"><span>09:41</span><span><span style="color:#6BA0D8">▪</span> hermes · connected</span></div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;padding:14px 18px 0"><span style="font-size:23px;font-weight:600;letter-spacing:.05em">CONFIG</span><span style="font-size:10px;color:#6a6a74">leman v0.1</span></div>
+        <div style="margin:14px 18px 0;height:9px;background-image:repeating-linear-gradient(90deg,rgba(255,255,255,.16) 0 1px,transparent 1px 24px);border-bottom:1px solid rgba(255,255,255,.09)"></div>
+        <div style="flex:1;overflow-y:auto;padding:20px 18px 16px">
+
+          <div style="display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.16em;color:#6a6a74"><span>SERVER</span><span style="flex:1;height:1px;background:rgba(255,255,255,.08)"></span><span style="letter-spacing:0;color:#6BA0D8">▪ connected · 42ms</span></div>
+          <div style="margin-top:14px"><div style="font-size:11px;color:#9a9aa4;margin-bottom:8px">hermes agent url</div>
+            <div style="display:flex;align-items:center;gap:9px;background:#0c0c10;border:1px solid rgba(255,255,255,.14);padding:11px 13px;font-size:12px"><span style="color:#6BA0D8">&gt;</span><span style="color:#e6e6ea">https://hermes.liquidx.net</span></div>
+          </div>
+          <div style="display:flex;gap:9px;margin-top:10px"><button style="font-family:inherit;font-size:10px;color:#c9c9d0;background:none;border:1px solid rgba(255,255,255,.18);padding:8px 13px;cursor:pointer">test connection</button><span style="font-size:10px;color:#54545e;align-self:center">protocol v2 · streaming ok</span></div>
+
+          <div style="display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.16em;color:#6a6a74;margin-top:30px"><span>AUTH</span><span style="flex:1;height:1px;background:rgba(255,255,255,.08)"></span></div>
+          <div style="margin-top:14px"><div style="font-size:11px;color:#9a9aa4;margin-bottom:8px">api key</div>
+            <div style="display:flex;align-items:center;gap:9px;background:#0c0c10;border:1px solid rgba(255,255,255,.14);padding:11px 13px;font-size:12px"><span style="color:#6BA0D8">&gt;</span><span style="color:#7a7a84;letter-spacing:.14em">hm_••••••••••••3kf2</span><span style="margin-left:auto;color:#6BA0D8;font-size:10px;cursor:pointer">reveal</span></div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px"><span style="font-size:13px">unlock with biometrics</span><div style="width:40px;height:20px;border:1px solid #6BA0D8;background:rgba(107,160,216,.15);position:relative;flex:none"><div style="position:absolute;top:1px;right:1px;width:16px;height:16px;background:#6BA0D8;box-shadow:0 0 8px rgba(107,160,216,.6)"></div></div></div>
+          <div style="font-size:10px;color:#54545e;margin-top:6px">key stored in secure enclave · never synced</div>
+
+          <div style="display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.16em;color:#6a6a74;margin-top:30px"><span>AGENT IDENTITY</span><span style="flex:1;height:1px;background:rgba(255,255,255,.08)"></span><span style="letter-spacing:0;color:#54545e">default profile</span></div>
+          <div style="margin-top:14px"><div style="font-size:11px;color:#9a9aa4;margin-bottom:8px">agent name</div>
+            <div style="display:flex;align-items:center;gap:9px;background:#0c0c10;border:1px solid rgba(255,255,255,.14);padding:11px 13px;font-size:12px"><span style="color:#6BA0D8">&gt;</span><span style="color:#e6e6ea">juno</span><span style="width:7px;height:14px;background:#6BA0D8;animation:caret 1s steps(1) infinite;margin-left:-2px"></span></div>
+          </div>
+          <div style="margin-top:16px"><div style="font-size:11px;color:#9a9aa4;margin-bottom:9px">avatar</div>
+            <div style="display:flex;gap:8px">
+              <span onClick="{{ av.a0 }}" style="width:38px;height:38px;display:flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer;border:1px solid {{ avB.a0 }};background:{{ avBg.a0 }};color:{{ avC.a0 }}">✳</span>
+              <span onClick="{{ av.a1 }}" style="width:38px;height:38px;display:flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer;border:1px solid {{ avB.a1 }};background:{{ avBg.a1 }};color:{{ avC.a1 }}">◆</span>
+              <span onClick="{{ av.a2 }}" style="width:38px;height:38px;display:flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer;border:1px solid {{ avB.a2 }};background:{{ avBg.a2 }};color:{{ avC.a2 }}">▲</span>
+              <span onClick="{{ av.a3 }}" style="width:38px;height:38px;display:flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer;border:1px solid {{ avB.a3 }};background:{{ avBg.a3 }};color:{{ avC.a3 }}">●</span>
+              <span onClick="{{ av.a4 }}" style="width:38px;height:38px;display:flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer;border:1px solid {{ avB.a4 }};background:{{ avBg.a4 }};color:{{ avC.a4 }}">⌬</span>
+            </div>
+          </div>
+          <div style="font-size:10px;color:#54545e;margin-top:9px">shown in thread headers &amp; turn labels · threads with their own profile override this</div>
+
+          <div style="display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.16em;color:#6a6a74;margin-top:30px"><span>DISPLAY</span><span style="flex:1;height:1px;background:rgba(255,255,255,.08)"></span></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px"><span style="font-size:13px">expand traces by default</span><div style="width:40px;height:20px;border:1px solid rgba(255,255,255,.18);position:relative;flex:none"><div style="position:absolute;top:1px;left:1px;width:16px;height:16px;background:#54545e"></div></div></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px"><span style="font-size:13px">show tool args in traces</span><div style="width:40px;height:20px;border:1px solid #6BA0D8;background:rgba(107,160,216,.15);position:relative;flex:none"><div style="position:absolute;top:1px;right:1px;width:16px;height:16px;background:#6BA0D8;box-shadow:0 0 8px rgba(107,160,216,.6)"></div></div></div>
+
+          <div style="display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.16em;color:#6a6a74;margin-top:30px"><span>DATA</span><span style="flex:1;height:1px;background:rgba(255,255,255,.08)"></span></div>
+          <div style="display:flex;gap:9px;margin-top:14px"><button style="font-family:inherit;font-size:11px;color:#c9c9d0;background:none;border:1px solid rgba(255,255,255,.18);padding:9px 14px;cursor:pointer">export threads</button><button style="font-family:inherit;font-size:11px;color:#d06a6a;background:none;border:1px solid rgba(208,106,106,.4);padding:9px 14px;cursor:pointer">clear all threads</button></div>
+        </div>
+        <div style="display:flex;border-top:1px solid rgba(255,255,255,.08);background:#0a0a0d">
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 0 12px;font-size:9px;letter-spacing:.1em;color:#5c5c66"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"><path d="M8 9h8"></path><path d="M8 13h6"></path><path d="M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1 -3 3h-5l-5 3v-3h-2a3 3 0 0 1 -3 -3v-8a3 3 0 0 1 3 -3h12z"></path></svg>threads</div>
+          <div style="position:relative;flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 0 12px;font-size:9px;letter-spacing:.1em;color:#6BA0D8"><span style="position:absolute;left:0;right:0;top:0;height:2px;background:#6BA0D8"></span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z"></path><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"></path></svg>config</div>
+        </div>
+      </div>
+      <div style="font-size:10px;color:#54545e;max-width:380px;line-height:1.7">agent section (autonomy / spend / notify) removed — that moves per-thread. New AGENT IDENTITY section: name field + selectable glyph avatar (clickable). Tab bar trimmed to threads / config.</div>
+    </div>
+
+  </div>
+  <p class="dv-next">Try next: "design the per-thread agent profile / autonomy sheet" · "show <a class="dv-oid" href="#2b">2b</a> with a live streaming turn" · "swipe actions on <a class="dv-oid" href="#2a">2a</a> rows"</p>
+</section>
+
+<section class="dv-turn" id="t1">
+  <div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">LEMAN — interface to the Hermes Agent · mobile</span><span style="font-size:11px;color:#54545e">accent #6BA0D8 · wanderloop core</span></div>
+  <div class="dv-opts">
+
+    <!-- ============ 1a THREAD LIST · canonical ============ -->
+    <div class="dv-opt" id="1a">
+      <div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>thread list — canonical rows · live search · pinned fold</div>
+      <div data-screen-label="1a thread list" style="width:380px;height:788px;border:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;overflow:hidden;background:#08080a">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 18px 0;font-size:9px;letter-spacing:.1em;color:#54545e"><span>09:41</span><span><span style="color:#6BA0D8">▪</span> hermes · connected</span></div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;padding:14px 18px 0"><span style="font-size:23px;font-weight:600;letter-spacing:.05em">THREADS</span><span style="font-size:10px;color:#6a6a74">{{ listCount }} · <span style="color:#6BA0D8">1 running</span></span></div>
+        <div style="margin:14px 18px 0;height:9px;background-image:repeating-linear-gradient(90deg,rgba(255,255,255,.16) 0 1px,transparent 1px 24px);border-bottom:1px solid rgba(255,255,255,.09)"></div>
+        <div style="flex:1;overflow-y:auto;padding:16px 18px 8px">
+          <sc-if value="{{ hasPinned }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.16em;color:#6a6a74;margin-bottom:4px"><span>PINNED</span><span style="color:#54545e">·</span><span style="color:#9a9aa4">{{ pinnedCount }}</span><span style="flex:1;height:1px;background:rgba(255,255,255,.08)"></span></div>
+            <sc-for list="{{ pinnedThreads }}" as="th" hint-placeholder-count="2">
+              <div onClick="{{ th.togglePin }}" style="display:flex;align-items:flex-start;gap:13px;padding:13px 0;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer">
+                <div style="flex:none;width:9px;margin-top:5px;position:relative">
+                  <sc-if value="{{ th.running }}"><span style="position:absolute;left:0;top:0;width:9px;height:9px;border-radius:50%;background:#6BA0D8;opacity:.4;animation:pulse 2s ease-out infinite"></span></sc-if>
+                  <span style="display:block;width:9px;height:9px;border-radius:50%;background:{{ th.dotBg }};border:1px solid {{ th.dotBorder }};box-shadow:{{ th.dotGlow }}"></span>
+                </div>
+                <div style="flex:1;min-width:0">
+                  <div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:{{ th.titleColor }}">{{ th.title }}</span><sc-if value="{{ th.unread }}"><span style="flex:none;width:5px;height:5px;background:#6BA0D8;box-shadow:0 0 6px rgba(107,160,216,.7)"></span></sc-if></div>
+                  <div style="font-size:11px;color:#7a7a84;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ th.preview }}</div>
+                  <div style="display:flex;gap:7px;margin-top:5px;font-size:10px"><span style="color:{{ th.stateColor }}">▪ {{ th.state }}</span><span style="color:#3a3a44">·</span><span style="color:#54545e">{{ th.time }}</span></div>
+                </div>
+                <span title="pinned — tap to unpin" style="flex:none;font-size:10px;color:#6BA0D8;margin-top:4px">◆</span>
+              </div>
+            </sc-for>
+            <div style="height:18px"></div>
+          </sc-if>
+          <div style="display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.16em;color:#6a6a74;margin-bottom:4px"><span>RECENT</span><span style="color:#54545e">·</span><span style="color:#9a9aa4">{{ recentCount }}</span><span style="flex:1;height:1px;background:rgba(255,255,255,.08)"></span><span style="letter-spacing:0;color:#54545e">last active</span></div>
+          <sc-for list="{{ recentThreads }}" as="th" hint-placeholder-count="5">
+            <div onClick="{{ th.togglePin }}" style="display:flex;align-items:flex-start;gap:13px;padding:13px 0;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer">
+              <div style="flex:none;width:9px;margin-top:5px;position:relative">
+                <sc-if value="{{ th.running }}"><span style="position:absolute;left:0;top:0;width:9px;height:9px;border-radius:50%;background:#6BA0D8;opacity:.4;animation:pulse 2s ease-out infinite"></span></sc-if>
+                <span style="display:block;width:9px;height:9px;border-radius:50%;background:{{ th.dotBg }};border:1px solid {{ th.dotBorder }};box-shadow:{{ th.dotGlow }}"></span>
+              </div>
+              <div style="flex:1;min-width:0">
+                <div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:{{ th.titleColor }}">{{ th.title }}</span><sc-if value="{{ th.unread }}"><span style="flex:none;width:5px;height:5px;background:#6BA0D8;box-shadow:0 0 6px rgba(107,160,216,.7)"></span></sc-if></div>
+                <div style="font-size:11px;color:#7a7a84;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ th.preview }}</div>
+                <div style="display:flex;gap:7px;margin-top:5px;font-size:10px"><span style="color:{{ th.stateColor }}">▪ {{ th.state }}</span><span style="color:#3a3a44">·</span><span style="color:#54545e">{{ th.time }}</span></div>
+              </div>
+              <span style="flex:none;font-size:10px;color:#2a2a32;margin-top:4px">◇</span>
+            </div>
+          </sc-for>
+          <sc-if value="{{ noResults }}"><div style="padding:28px 0;font-size:11px;color:#54545e;text-align:center">no threads match "{{ q }}"</div></sc-if>
+        </div>
+        <div style="padding:12px 18px;border-top:1px solid rgba(255,255,255,.06)">
+          <div style="display:flex;align-items:center;gap:9px;background:#0c0c10;border:1px solid rgba(255,255,255,.14);padding:11px 13px;font-size:12px"><span style="color:#6BA0D8">&gt;</span><input value="{{ q }}" onChange="{{ onQ }}" placeholder="filter threads" style="flex:1;background:none;border:none;outline:none;color:#e6e6ea;font-size:12px;min-width:0"></input><span style="color:#45454e;font-size:10px;letter-spacing:.1em;flex:none">⏎ find</span></div>
+        </div>
+        <div style="display:flex;border-top:1px solid rgba(255,255,255,.08);background:#0a0a0d">
+          <div style="position:relative;flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 0 12px;font-size:9px;letter-spacing:.1em;color:#6BA0D8"><span style="position:absolute;left:0;right:0;top:0;height:2px;background:#6BA0D8"></span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"><path d="M8 9h8"></path><path d="M8 13h6"></path><path d="M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1 -3 3h-5l-5 3v-3h-2a3 3 0 0 1 -3 -3v-8a3 3 0 0 1 3 -3h12z"></path></svg>threads</div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 0 12px;font-size:9px;letter-spacing:.1em;color:#5c5c66"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"><path d="M12 3l8 4.5v9l-8 4.5l-8 -4.5v-9l8 -4.5"></path><path d="M12 12l8 -4.5"></path><path d="M12 12v9"></path><path d="M12 12l-8 -4.5"></path></svg>agent</div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 0 12px;font-size:9px;letter-spacing:.1em;color:#5c5c66"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z"></path><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"></path></svg>config</div>
+        </div>
+      </div>
+      <div style="font-size:10px;color:#54545e;max-width:380px;line-height:1.7">tap a row's ◆/◇ area to pin/unpin (clickable). Live text filter in the bottom field. State token: <span style="color:#6BA0D8">▪ running</span> (pulsing dot) · <span style="color:#d0a24c">▪ waiting on you</span> · ▪ done.</div>
+    </div>
+
+    <!-- ============ 1b THREAD LIST · spine / day-grouped ============ -->
+    <div class="dv-opt" id="1b">
+      <div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>thread list — activity spine · grouped by day · denser</div>
+      <div data-screen-label="1b thread list spine" style="width:380px;height:788px;border:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;overflow:hidden;background:#08080a">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 18px 0;font-size:9px;letter-spacing:.1em;color:#54545e"><span>09:41</span><span><span style="color:#6BA0D8">▪</span> hermes · connected</span></div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;padding:14px 18px 0"><span style="font-size:23px;font-weight:600;letter-spacing:.05em">THREADS</span><span style="font-size:10px;color:#6a6a74">7 · this week</span></div>
+        <div style="margin:14px 18px 0;height:9px;background-image:repeating-linear-gradient(90deg,rgba(255,255,255,.16) 0 1px,transparent 1px 24px);border-bottom:1px solid rgba(255,255,255,.09)"></div>
+        <div style="flex:1;overflow-y:auto;padding:18px 18px 8px">
+          <div style="display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.16em;color:#6a6a74"><span>TODAY</span><span style="flex:1;height:1px;background:rgba(255,255,255,.08)"></span><span style="letter-spacing:0;color:#54545e">jul 14</span></div>
+          <div style="position:relative;padding-left:22px;margin-top:14px">
+            <div style="position:absolute;left:6px;top:6px;bottom:6px;width:1px;background:rgba(255,255,255,.11)"></div>
+            <div style="position:relative;padding-bottom:18px">
+              <span style="position:absolute;left:-20px;top:4px;width:9px;height:9px;border-radius:50%;background:#6BA0D8;box-shadow:0 0 8px rgba(107,160,216,.6)"></span>
+              <span style="position:absolute;left:-20px;top:4px;width:9px;height:9px;border-radius:50%;background:#6BA0D8;opacity:.4;animation:pulse 2s ease-out infinite"></span>
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><span style="font-size:13px;font-weight:500">renew car insurance</span><span style="font-size:10px;color:#6BA0D8;flex:none">running · step 3/5</span></div>
+              <div style="font-size:10px;color:#54545e;margin-top:3px">comparing quotes from 4 providers…</div>
+              <div style="margin-top:7px;position:relative;height:3px;background:rgba(255,255,255,.05)"><div style="position:absolute;inset:0;width:60%;background:#6BA0D8;box-shadow:0 0 8px rgba(107,160,216,.4);transform-origin:left;animation:barDraw .8s cubic-bezier(.16,1,.3,1) both"></div></div>
+            </div>
+            <div style="position:relative;padding-bottom:18px">
+              <span style="position:absolute;left:-20px;top:4px;width:9px;height:9px;border-radius:50%;background:#d0a24c;box-shadow:0 0 8px rgba(208,162,76,.5)"></span>
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><span style="font-size:13px;font-weight:500">book train to geneva <span style="display:inline-block;width:5px;height:5px;background:#6BA0D8;box-shadow:0 0 6px rgba(107,160,216,.7);margin-left:4px"></span></span><span style="font-size:10px;color:#d0a24c;flex:none">needs approval</span></div>
+              <div style="font-size:10px;color:#54545e;margin-top:3px">2 options found — pick one to book · 08:52</div>
+            </div>
+            <div style="position:relative">
+              <span style="position:absolute;left:-20px;top:4px;width:9px;height:9px;border-radius:50%;border:1px solid #54545e;background:#08080a"></span>
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><span style="font-size:13px;color:#9a9aa4">morning digest</span><span style="font-size:10px;color:#54545e;flex:none">done · 07:00</span></div>
+              <div style="font-size:10px;color:#54545e;margin-top:3px">14 items · 3 flagged for you</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.16em;color:#6a6a74;margin-top:26px"><span>YESTERDAY</span><span style="flex:1;height:1px;background:rgba(255,255,255,.08)"></span><span style="letter-spacing:0;color:#54545e">jul 13</span></div>
+          <div style="position:relative;padding-left:22px;margin-top:14px">
+            <div style="position:absolute;left:6px;top:6px;bottom:6px;width:1px;background:rgba(255,255,255,.11)"></div>
+            <div style="position:relative;padding-bottom:18px">
+              <span style="position:absolute;left:-20px;top:4px;width:9px;height:9px;border-radius:50%;border:1px solid #54545e;background:#08080a"></span>
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><span style="font-size:13px;color:#9a9aa4">fix flaky ci pipeline <span style="color:#6BA0D8;font-size:10px">◆</span></span><span style="font-size:10px;color:#54545e;flex:none">done · 22:10</span></div>
+              <div style="font-size:10px;color:#54545e;margin-top:3px">root cause: race in test fixture · pr #482 merged</div>
+            </div>
+            <div style="position:relative;padding-bottom:18px">
+              <span style="position:absolute;left:-20px;top:4px;width:9px;height:9px;border-radius:50%;border:1px solid #54545e;background:#08080a"></span>
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><span style="font-size:13px;color:#9a9aa4">plan lyon trip <span style="color:#6BA0D8;font-size:10px">◆</span></span><span style="font-size:10px;color:#54545e;flex:none">idle · 18:44</span></div>
+              <div style="font-size:10px;color:#54545e;margin-top:3px">itinerary drafted · waiting on hotel prices</div>
+            </div>
+            <div style="position:relative">
+              <span style="position:absolute;left:-20px;top:4px;width:9px;height:9px;border-radius:50%;border:1px solid #54545e;background:#08080a"></span>
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><span style="font-size:13px;color:#9a9aa4">summarize q2 board notes</span><span style="font-size:10px;color:#54545e;flex:none">done · 11:02</span></div>
+              <div style="font-size:10px;color:#54545e;margin-top:3px">6 pages → 400 words · sent to notes</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.16em;color:#6a6a74;margin-top:26px"><span>EARLIER</span><span style="flex:1;height:1px;background:rgba(255,255,255,.08)"></span></div>
+          <div style="position:relative;padding-left:22px;margin-top:14px;padding-bottom:10px">
+            <div style="position:absolute;left:6px;top:6px;bottom:6px;width:1px;background:rgba(255,255,255,.11)"></div>
+            <div style="position:relative">
+              <span style="position:absolute;left:-20px;top:4px;width:9px;height:9px;border-radius:50%;border:1px solid #54545e;background:#08080a"></span>
+              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><span style="font-size:13px;color:#9a9aa4">monitor hn for llm articles</span><span style="font-size:10px;color:#54545e;flex:none">recurring · jul 11</span></div>
+            </div>
+          </div>
+        </div>
+        <div style="padding:12px 18px;border-top:1px solid rgba(255,255,255,.06)">
+          <div style="display:flex;align-items:center;gap:9px;background:#0c0c10;border:1px solid #6BA0D8;padding:11px 13px;font-size:12px;color:#6a6a74"><span style="color:#6BA0D8">&gt;</span><span>new thread</span><span style="width:7px;height:14px;background:#6BA0D8;animation:caret 1s steps(1) infinite;margin-left:-2px"></span><span style="margin-left:auto;color:#45454e;font-size:10px;letter-spacing:.1em">⏎ start</span></div>
+        </div>
+        <div style="display:flex;border-top:1px solid rgba(255,255,255,.08);background:#0a0a0d">
+          <div style="position:relative;flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 0 12px;font-size:9px;letter-spacing:.1em;color:#6BA0D8"><span style="position:absolute;left:0;right:0;top:0;height:2px;background:#6BA0D8"></span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"><path d="M8 9h8"></path><path d="M8 13h6"></path><path d="M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1 -3 3h-5l-5 3v-3h-2a3 3 0 0 1 -3 -3v-8a3 3 0 0 1 3 -3h12z"></path></svg>threads</div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 0 12px;font-size:9px;letter-spacing:.1em;color:#5c5c66"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"><path d="M12 3l8 4.5v9l-8 4.5l-8 -4.5v-9l8 -4.5"></path><path d="M12 12l8 -4.5"></path><path d="M12 12v9"></path><path d="M12 12l-8 -4.5"></path></svg>agent</div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 0 12px;font-size:9px;letter-spacing:.1em;color:#5c5c66"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z"></path><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"></path></svg>config</div>
+        </div>
+      </div>
+      <div style="font-size:10px;color:#54545e;max-width:380px;line-height:1.7">threads as nodes on the family's activity spine, grouped by day. Running thread shows a live progress bar; pinned marked ◆ inline. Status is the marker itself: filled accent = running, amber = needs you, hollow = settled.</div>
+    </div>
+
+    <!-- ============ 1c THREAD VIEW · transcript ============ -->
+    <div class="dv-opt" id="1c">
+      <div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>thread view — transcript · collapsed traces · rich blocks</div>
+      <div data-screen-label="1c thread view" style="width:380px;height:788px;border:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;overflow:hidden;background:#08080a">
+        <div style="display:flex;align-items:center;gap:12px;padding:13px 18px;border-bottom:1px solid rgba(255,255,255,.08)">
+          <span style="color:#8a8a94;font-size:16px;cursor:pointer">‹</span>
+          <div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">book train to geneva</div><div style="font-size:9px;color:#d0a24c;letter-spacing:.08em;margin-top:2px">▪ WAITING ON YOU · 6 turns</div></div>
+          <span style="font-size:11px;color:#6BA0D8;cursor:pointer">◆</span>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:18px 18px 10px">
+
+          <div style="display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.16em;color:#6a6a74"><span>YOU</span><span style="flex:1;height:1px;background:rgba(255,255,255,.08)"></span><span style="letter-spacing:0;color:#54545e">08:41</span></div>
+          <div style="font-size:13px;line-height:1.65;margin-top:9px;color:#e6e6ea"><span style="color:#6BA0D8">&gt;</span> book me a train to geneva on friday morning, aisle seat, arrive before noon</div>
+
+          <div style="display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.16em;color:#6a6a74;margin-top:22px"><span style="color:#6BA0D8">LEMAN</span><span style="flex:1;height:1px;background:rgba(255,255,255,.08)"></span><span style="letter-spacing:0;color:#54545e">08:52</span></div>
+
+          <div onClick="{{ tg.c1 }}" style="margin-top:9px;cursor:pointer;font-size:10px;color:#54545e;display:flex;align-items:center;gap:8px" style-hover="color:#7a7a84">
+            <span style="color:#3f3f48">{{ c1Arrow }}</span><span>thinking · 5 steps · 2 tool calls · 11.4s</span><span style="flex:1;height:1px;background:rgba(255,255,255,.04)"></span>
+          </div>
+          <sc-if value="{{ open.c1 }}" hint-placeholder-val="{{ false }}">
+            <div style="position:relative;padding-left:20px;margin-top:10px;animation:riseIn .3s ease both">
+              <div style="position:absolute;left:4px;top:5px;bottom:5px;width:1px;background:rgba(255,255,255,.09)"></div>
+              <div style="position:relative;padding-bottom:13px">
+                <span style="position:absolute;left:-19px;top:4px;width:7px;height:7px;border-radius:50%;border:1px solid #54545e;background:#08080a"></span>
+                <div style="font-size:10px;color:#7a7a84;line-height:1.6">parsing constraints — friday, arrive &lt; 12:00, aisle</div>
+              </div>
+              <div style="position:relative;padding-bottom:13px">
+                <span style="position:absolute;left:-19px;top:4px;width:7px;height:7px;border-radius:50%;background:#5b7ea6"></span>
+                <div style="font-size:10px;color:#9a9aa4">rail.search <span style="color:#54545e">(lausanne → geneva, 2026-07-17, dep 06:00–10:30)</span></div>
+                <div style="font-size:10px;color:#54545e;margin-top:3px">→ 14 services · 2 match constraints · 0.9s</div>
+              </div>
+              <div style="position:relative;padding-bottom:13px">
+                <span style="position:absolute;left:-19px;top:4px;width:7px;height:7px;border-radius:50%;border:1px solid #54545e;background:#08080a"></span>
+                <div style="font-size:10px;color:#7a7a84;line-height:1.6">ir90 is 12 min faster but 18 chf more — surfacing both</div>
+              </div>
+              <div style="position:relative;padding-bottom:13px">
+                <span style="position:absolute;left:-19px;top:4px;width:7px;height:7px;border-radius:50%;background:#5b7ea6"></span>
+                <div style="font-size:10px;color:#9a9aa4">seatmap.check <span style="color:#54545e">(ir90, ir15 · aisle availability)</span></div>
+                <div style="font-size:10px;color:#54545e;margin-top:3px">→ aisle free on both · coach b quieter on ir15 · 1.2s</div>
+              </div>
+              <div style="position:relative">
+                <span style="position:absolute;left:-19px;top:4px;width:7px;height:7px;border-radius:50%;border:1px solid #54545e;background:#08080a"></span>
+                <div style="font-size:10px;color:#7a7a84;line-height:1.6">needs user approval before payment — halting here</div>
+              </div>
+            </div>
+          </sc-if>
+
+          <div style="font-size:13px;line-height:1.65;margin-top:14px;color:#c9c9d0">found <span style="color:#e6e6ea;font-weight:600">2 trains</span> that arrive before noon on friday. both have aisle seats free:</div>
+
+          <div style="border:1px solid rgba(255,255,255,.1);margin-top:12px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;padding:11px 13px;border-bottom:1px solid rgba(255,255,255,.06)"><span style="font-size:13px"><span style="color:#6BA0D8">ir15</span> · 08:20 → 09:06</span><span style="font-size:11px;color:#9a9aa4">28 chf</span></div>
+            <div style="padding:8px 13px;font-size:10px;color:#54545e;border-bottom:1px solid rgba(255,255,255,.06)">46 min · direct · coach b quiet zone · aisle 42c</div>
+            <div style="display:flex;align-items:baseline;justify-content:space-between;padding:11px 13px;border-bottom:1px solid rgba(255,255,255,.06)"><span style="font-size:13px;color:#9a9aa4">ir90 · 08:04 → 08:52</span><span style="font-size:11px;color:#9a9aa4">46 chf</span></div>
+            <div style="padding:8px 13px;font-size:10px;color:#54545e">48 min · direct · standard coach · aisle 11d</div>
+          </div>
+
+          <div style="display:flex;gap:9px;margin-top:12px">
+            <button onClick="{{ tg.book }}" style="font-family:inherit;font-size:11px;color:#6BA0D8;background:rgba(107,160,216,.1);border:1px solid #6BA0D8;padding:10px 16px;cursor:pointer">book ir15 · 28 chf</button>
+            <button style="font-family:inherit;font-size:11px;color:#c9c9d0;background:none;border:1px solid rgba(255,255,255,.18);padding:10px 16px;cursor:pointer">book ir90</button>
+            <button style="font-family:inherit;font-size:11px;color:#7a7a84;background:none;border:1px solid rgba(255,255,255,.1);padding:10px 12px;cursor:pointer">neither</button>
+          </div>
+
+          <sc-if value="{{ open.book }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.16em;color:#6a6a74;margin-top:22px"><span>YOU</span><span style="flex:1;height:1px;background:rgba(255,255,255,.08)"></span><span style="letter-spacing:0;color:#54545e">now</span></div>
+            <div style="font-size:13px;line-height:1.65;margin-top:9px"><span style="color:#6BA0D8">&gt;</span> book ir15 · 28 chf <span style="font-size:10px;color:#54545e">(via button)</span></div>
+            <div style="display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.16em;color:#6a6a74;margin-top:22px"><span style="color:#6BA0D8">LEMAN</span><span style="flex:1;height:1px;background:rgba(255,255,255,.08)"></span><span style="letter-spacing:0;color:#6BA0D8">running</span></div>
+            <div style="margin-top:10px;border:1px solid rgba(255,255,255,.08);padding:12px 13px">
+              <div style="display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.14em;color:#6a6a74"><span>BOOKING</span><span style="flex:1;height:1px;background:rgba(255,255,255,.06)"></span><span style="color:#6BA0D8">2/4</span></div>
+              <div style="display:flex;flex-direction:column;gap:8px;margin-top:11px;font-size:11px">
+                <div style="display:flex;gap:9px;color:#8a8a94"><span style="color:#6BA0D8">▪</span>reserve seat 42c</div>
+                <div style="display:flex;gap:9px;color:#8a8a94"><span style="color:#6BA0D8">▪</span>apply half-fare card</div>
+                <div style="display:flex;gap:9px;color:#d0a24c"><span>▪</span>payment via saved card…</div>
+                <div style="display:flex;gap:9px;color:#54545e"><span>▪</span>add to calendar</div>
+              </div>
+            </div>
+          </sc-if>
+
+          <div style="display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.16em;color:#6a6a74;margin-top:24px"><span style="color:#6BA0D8">LEMAN</span><span style="flex:1;height:1px;background:rgba(255,255,255,.08)"></span><span style="letter-spacing:0;color:#54545e">08:53</span></div>
+          <div onClick="{{ tg.src }}" style="margin-top:9px;cursor:pointer;font-size:10px;color:#54545e;display:flex;align-items:center;gap:8px" style-hover="color:#7a7a84"><span style="color:#3f3f48">{{ srcArrow }}</span><span>fare rules · 3 conditions</span><span style="flex:1;height:1px;background:rgba(255,255,255,.04)"></span></div>
+          <sc-if value="{{ open.src }}" hint-placeholder-val="{{ false }}">
+            <div style="margin-top:9px;padding:11px 13px;background:#0c0c10;border:1px solid rgba(255,255,255,.07);font-size:10px;color:#7a7a84;line-height:1.8;animation:riseIn .3s ease both">exchangeable until 08:19 friday · no refund after departure · half-fare card applied automatically if valid on travel date</div>
+          </sc-if>
+        </div>
+        <div style="padding:12px 18px;border-top:1px solid rgba(255,255,255,.06)">
+          <div style="display:flex;align-items:center;gap:9px;background:#0c0c10;border:1px solid rgba(255,255,255,.14);padding:11px 13px;font-size:12px;color:#6a6a74"><span style="color:#6BA0D8">&gt;</span><span>message leman</span><span style="width:7px;height:14px;background:#6BA0D8;animation:caret 1s steps(1) infinite;margin-left:-2px"></span><span style="margin-left:auto;color:#45454e;font-size:10px;letter-spacing:.1em">⏎ send</span></div>
+        </div>
+      </div>
+      <div style="font-size:10px;color:#54545e;max-width:380px;line-height:1.7">clickable: tap the muted "thinking · 5 steps" line to expand the trace spine (hollow node = reasoning, filled = tool call, each with args + result preview). Tap <span style="color:#6BA0D8">book ir15</span> to see the turn it produces — a live progress block. "fare rules" is a collapsible markdown section.</div>
+    </div>
+
+    <!-- ============ 1d THREAD VIEW · session log ============ -->
+    <div class="dv-opt" id="1d">
+      <div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>thread view — session log · gutter timestamps · denser</div>
+      <div data-screen-label="1d thread view log" style="width:380px;height:788px;border:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;overflow:hidden;background:#08080a">
+        <div style="display:flex;align-items:center;gap:12px;padding:13px 18px;border-bottom:1px solid rgba(255,255,255,.08)">
+          <span style="color:#8a8a94;font-size:16px;cursor:pointer">‹</span>
+          <div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">fix flaky ci pipeline</div><div style="font-size:9px;color:#54545e;letter-spacing:.08em;margin-top:2px">▪ DONE · pr #482 merged</div></div>
+          <span style="font-size:11px;color:#6BA0D8;cursor:pointer">◆</span>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:16px 18px 10px">
+
+          <div style="display:flex;gap:12px;margin-bottom:16px">
+            <span style="flex:none;width:34px;font-size:9px;color:#3f3f48;text-align:right;padding-top:3px">21:40</span>
+            <div style="flex:1;min-width:0;border-left:2px solid #6BA0D8;padding-left:12px">
+              <div style="font-size:12px;line-height:1.65">the e2e suite on main keeps failing ~1 in 4 runs. find the flaky test and fix it</div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:12px;margin-bottom:6px">
+            <span style="flex:none;width:34px;font-size:9px;color:#3f3f48;text-align:right;padding-top:3px">21:41</span>
+            <div onClick="{{ tg.d1 }}" style="flex:1;min-width:0;cursor:pointer;font-size:10px;color:#54545e;display:flex;align-items:center;gap:8px" style-hover="color:#7a7a84"><span style="color:#3f3f48">{{ d1Arrow }}</span><span>trace · 9 steps · ci.logs ×3 · repo.search ×2 · 3m 12s</span></div>
+          </div>
+          <sc-if value="{{ open.d1 }}" hint-placeholder-val="{{ false }}">
+            <div style="margin:4px 0 14px 46px;border:1px solid rgba(255,255,255,.07);background:#0c0c10;animation:riseIn .3s ease both">
+              <div style="display:flex;gap:10px;padding:9px 12px;border-bottom:1px solid rgba(255,255,255,.05)"><span style="flex:none;font-size:9px;color:#5b7ea6;width:74px">ci.logs</span><div style="flex:1;min-width:0;font-size:10px;color:#7a7a84;line-height:1.6">last 40 runs on main <span style="color:#54545e">→ 11 failures, all in checkout.spec</span></div></div>
+              <div style="display:flex;gap:10px;padding:9px 12px;border-bottom:1px solid rgba(255,255,255,.05)"><span style="flex:none;font-size:9px;color:#7a7a84;width:74px">reasoning</span><div style="flex:1;min-width:0;font-size:10px;color:#7a7a84;line-height:1.6">failures cluster on parallel shards → suspect shared state</div></div>
+              <div style="display:flex;gap:10px;padding:9px 12px;border-bottom:1px solid rgba(255,255,255,.05)"><span style="flex:none;font-size:9px;color:#5b7ea6;width:74px">repo.search</span><div style="flex:1;min-width:0;font-size:10px;color:#7a7a84;line-height:1.6">"beforeAll" in e2e/checkout <span style="color:#54545e">→ fixture seeds db without tx isolation</span></div></div>
+              <div style="display:flex;gap:10px;padding:9px 12px;border-bottom:1px solid rgba(255,255,255,.05)"><span style="flex:none;font-size:9px;color:#5b7ea6;width:74px">ci.rerun</span><div style="flex:1;min-width:0;font-size:10px;color:#7a7a84;line-height:1.6">checkout.spec ×20 isolated <span style="color:#54545e">→ 0 failures with fix applied</span></div></div>
+              <div style="display:flex;gap:10px;padding:9px 12px"><span style="flex:none;font-size:9px;color:#7a7a84;width:74px">reasoning</span><div style="flex:1;min-width:0;font-size:10px;color:#7a7a84;line-height:1.6">confident in root cause · preparing patch + pr</div></div>
+            </div>
+          </sc-if>
+
+          <div style="display:flex;gap:12px;margin-bottom:16px">
+            <span style="flex:none;width:34px;font-size:9px;color:#3f3f48;text-align:right;padding-top:3px">21:44</span>
+            <div style="flex:1;min-width:0;border-left:2px solid rgba(255,255,255,.12);padding-left:12px">
+              <div style="font-size:12px;line-height:1.7;color:#c9c9d0">found it. <span style="color:#e6e6ea">checkout.spec</span> seeds the db in a <span style="color:#e6e6ea">beforeAll</span> without transaction isolation — parallel shards race on the same rows. patch:</div>
+              <div style="margin-top:10px;background:#0c0c10;border:1px solid rgba(255,255,255,.08)">
+                <div style="display:flex;justify-content:space-between;padding:7px 12px;border-bottom:1px solid rgba(255,255,255,.06);font-size:9px;color:#54545e;letter-spacing:.08em"><span>e2e/checkout.spec.ts</span><span style="color:#6BA0D8;cursor:pointer">copy</span></div>
+                <div style="padding:11px 12px;font-size:10.5px;line-height:1.75;overflow-x:auto"><div style="color:#d06a6a">- beforeAll(() =&gt; seedDb())</div><div style="color:#6bb08a">+ beforeEach(() =&gt; seedDb({ isolate: true }))</div><div style="color:#6bb08a">+ afterEach(() =&gt; rollback())</div></div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:7px;margin-top:12px;font-size:11px">
+                <div style="display:flex;gap:9px;color:#8a8a94"><span style="color:#6BA0D8">▪</span>reproduced · 11/40 runs failing</div>
+                <div style="display:flex;gap:9px;color:#8a8a94"><span style="color:#6BA0D8">▪</span>patched fixture isolation</div>
+                <div style="display:flex;gap:9px;color:#8a8a94"><span style="color:#6BA0D8">▪</span>verified ×20 clean reruns</div>
+                <div style="display:flex;gap:9px;color:#8a8a94"><span style="color:#6BA0D8">▪</span>pr #482 opened → merged</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:12px;margin-bottom:16px">
+            <span style="flex:none;width:34px;font-size:9px;color:#3f3f48;text-align:right;padding-top:3px">22:02</span>
+            <div style="flex:1;min-width:0;border-left:2px solid #6BA0D8;padding-left:12px">
+              <div style="font-size:12px;line-height:1.65">nice. watch the next 20 runs and reopen if it recurs</div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:12px;margin-bottom:6px">
+            <span style="flex:none;width:34px;font-size:9px;color:#3f3f48;text-align:right;padding-top:3px">22:03</span>
+            <div onClick="{{ tg.d2 }}" style="flex:1;min-width:0;cursor:pointer;font-size:10px;color:#54545e;display:flex;align-items:center;gap:8px" style-hover="color:#7a7a84"><span style="color:#3f3f48">{{ d2Arrow }}</span><span>trace · 2 steps · monitor scheduled</span></div>
+          </div>
+          <sc-if value="{{ open.d2 }}" hint-placeholder-val="{{ false }}">
+            <div style="margin:4px 0 14px 46px;border:1px solid rgba(255,255,255,.07);background:#0c0c10;animation:riseIn .3s ease both">
+              <div style="display:flex;gap:10px;padding:9px 12px;border-bottom:1px solid rgba(255,255,255,.05)"><span style="flex:none;font-size:9px;color:#5b7ea6;width:74px">monitor.add</span><div style="flex:1;min-width:0;font-size:10px;color:#7a7a84;line-height:1.6">watch e2e on main · 20 runs · alert on failure</div></div>
+              <div style="display:flex;gap:10px;padding:9px 12px"><span style="flex:none;font-size:9px;color:#7a7a84;width:74px">reasoning</span><div style="flex:1;min-width:0;font-size:10px;color:#7a7a84;line-height:1.6">will reopen this thread automatically if the monitor fires</div></div>
+            </div>
+          </sc-if>
+
+          <div style="display:flex;gap:12px">
+            <span style="flex:none;width:34px;font-size:9px;color:#3f3f48;text-align:right;padding-top:3px">22:03</span>
+            <div style="flex:1;min-width:0;border-left:2px solid rgba(255,255,255,.12);padding-left:12px">
+              <div style="font-size:12px;line-height:1.65;color:#c9c9d0">watching the next 20 runs — i'll reopen this thread if it fails again. <span style="color:#54545e">monitor #m-31 active</span></div>
+            </div>
+          </div>
+
+        </div>
+        <div style="padding:12px 18px;border-top:1px solid rgba(255,255,255,.06)">
+          <div style="display:flex;align-items:center;gap:9px;background:#0c0c10;border:1px solid rgba(255,255,255,.14);padding:11px 13px;font-size:12px;color:#6a6a74"><span style="color:#6BA0D8">&gt;</span><span>message leman</span><span style="width:7px;height:14px;background:#6BA0D8;animation:caret 1s steps(1) infinite;margin-left:-2px"></span><span style="margin-left:auto;color:#45454e;font-size:10px;letter-spacing:.1em">⏎ send</span></div>
+        </div>
+      </div>
+      <div style="font-size:10px;color:#54545e;max-width:380px;line-height:1.7">denser log reading: gutter timestamps, <span style="color:#6BA0D8">accent left-rule = you</span>, hairline rule = agent. Traces expand into a boxed step table (tool name column + result). Shows code-diff block + task-status list as rich markdown.</div>
+    </div>
+
+    <!-- ============ 1e NEW THREAD ============ -->
+    <div class="dv-opt" id="1e">
+      <div class="dv-olabel"><a class="dv-oid" href="#1e">1e</a>new thread — composer-first</div>
+      <div data-screen-label="1e new thread" style="width:380px;height:788px;border:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;overflow:hidden;background:#08080a">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 18px 0;font-size:9px;letter-spacing:.1em;color:#54545e"><span>09:41</span><span><span style="color:#6BA0D8">▪</span> hermes · connected</span></div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;padding:14px 18px 0"><span style="font-size:23px;font-weight:600;letter-spacing:.05em">NEW THREAD</span><span style="font-size:10px;color:#6a6a74;cursor:pointer">esc · cancel</span></div>
+        <div style="margin:14px 18px 0;height:9px;background-image:repeating-linear-gradient(90deg,rgba(255,255,255,.16) 0 1px,transparent 1px 24px);border-bottom:1px solid rgba(255,255,255,.09)"></div>
+        <div style="padding:20px 18px 0">
+          <div style="background:#0c0c10;border:1px solid #6BA0D8;padding:14px;min-height:110px;font-size:13px;line-height:1.65;color:#6a6a74"><span style="color:#6BA0D8">&gt;</span> what should leman do?<span style="display:inline-block;width:7px;height:15px;background:#6BA0D8;animation:caret 1s steps(1) infinite;vertical-align:-2px;margin-left:2px"></span></div>
+          <div style="display:flex;justify-content:space-between;margin-top:10px"><span style="font-size:10px;color:#54545e">runs in background · interrupts only when it needs you</span><button style="font-family:inherit;font-size:11px;color:#6BA0D8;background:rgba(107,160,216,.1);border:1px solid #6BA0D8;padding:9px 16px;cursor:pointer">start ⏎</button></div>
+        </div>
+        <div style="padding:28px 18px 0">
+          <div style="display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.16em;color:#6a6a74"><span>SUGGESTED</span><span style="flex:1;height:1px;background:rgba(255,255,255,.08)"></span><span style="letter-spacing:0;color:#54545e">from your patterns</span></div>
+          <div style="display:flex;flex-direction:column;margin-top:6px">
+            <div style="display:flex;align-items:center;gap:11px;padding:13px 0;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer" style-hover="background:rgba(255,255,255,.02)"><span style="color:#6BA0D8;font-size:11px">&gt;</span><span style="font-size:12px;color:#c9c9d0">run the morning digest now</span></div>
+            <div style="display:flex;align-items:center;gap:11px;padding:13px 0;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer" style-hover="background:rgba(255,255,255,.02)"><span style="color:#6BA0D8;font-size:11px">&gt;</span><span style="font-size:12px;color:#c9c9d0">check hotel prices for the lyon trip</span></div>
+            <div style="display:flex;align-items:center;gap:11px;padding:13px 0;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer" style-hover="background:rgba(255,255,255,.02)"><span style="color:#6BA0D8;font-size:11px">&gt;</span><span style="font-size:12px;color:#c9c9d0">summarize unread in #eng-infra</span></div>
+          </div>
+        </div>
+        <div style="padding:28px 18px 0">
+          <div style="display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.16em;color:#6a6a74"><span>AGENT CAN</span><span style="flex:1;height:1px;background:rgba(255,255,255,.08)"></span></div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px">
+            <span style="font-size:10px;color:#7a7a84;border:1px solid rgba(255,255,255,.09);padding:6px 10px">search web</span>
+            <span style="font-size:10px;color:#7a7a84;border:1px solid rgba(255,255,255,.09);padding:6px 10px">read email</span>
+            <span style="font-size:10px;color:#7a7a84;border:1px solid rgba(255,255,255,.09);padding:6px 10px">book &amp; pay ≤ 100 chf</span>
+            <span style="font-size:10px;color:#7a7a84;border:1px solid rgba(255,255,255,.09);padding:6px 10px">edit repos</span>
+            <span style="font-size:10px;color:#7a7a84;border:1px solid rgba(255,255,255,.09);padding:6px 10px">schedule &amp; monitor</span>
+            <span style="font-size:10px;color:#54545e;border:1px dashed rgba(255,255,255,.09);padding:6px 10px">+ configure</span>
+          </div>
+        </div>
+        <div style="margin-top:auto;padding:0 18px 16px">
+          <div style="font-size:9px;color:#3f3f48;letter-spacing:.06em;line-height:1.8">threads persist · leman keeps working after you close the app<br>approvals required for payments &amp; irreversible actions</div>
+        </div>
+      </div>
+      <div style="font-size:10px;color:#54545e;max-width:380px;line-height:1.7">reached from the "&gt; new thread" field on <a class="dv-oid" href="#1a">1a</a>/<a class="dv-oid" href="#1b">1b</a>. Suggestions come from recurring threads; capability chips set expectations about what the agent may do unattended.</div>
+    </div>
+
+    <!-- ============ 1f SETTINGS ============ -->
+    <div class="dv-opt" id="1f">
+      <div class="dv-olabel"><a class="dv-oid" href="#1f">1f</a>config — server · auth · preferences</div>
+      <div data-screen-label="1f config" style="width:380px;height:788px;border:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;overflow:hidden;background:#08080a">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 18px 0;font-size:9px;letter-spacing:.1em;color:#54545e"><span>09:41</span><span><span style="color:#6BA0D8">▪</span> hermes · connected</span></div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;padding:14px 18px 0"><span style="font-size:23px;font-weight:600;letter-spacing:.05em">CONFIG</span><span style="font-size:10px;color:#6a6a74">leman v0.1</span></div>
+        <div style="margin:14px 18px 0;height:9px;background-image:repeating-linear-gradient(90deg,rgba(255,255,255,.16) 0 1px,transparent 1px 24px);border-bottom:1px solid rgba(255,255,255,.09)"></div>
+        <div style="flex:1;overflow-y:auto;padding:20px 18px 16px">
+
+          <div style="display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.16em;color:#6a6a74"><span>SERVER</span><span style="flex:1;height:1px;background:rgba(255,255,255,.08)"></span><span style="letter-spacing:0;color:#6BA0D8">▪ connected · 42ms</span></div>
+          <div style="margin-top:14px"><div style="font-size:11px;color:#9a9aa4;margin-bottom:8px">hermes agent url</div>
+            <div style="display:flex;align-items:center;gap:9px;background:#0c0c10;border:1px solid rgba(255,255,255,.14);padding:11px 13px;font-size:12px"><span style="color:#6BA0D8">&gt;</span><span style="color:#e6e6ea">https://hermes.liquidx.net</span></div>
+          </div>
+          <div style="display:flex;gap:9px;margin-top:10px"><button style="font-family:inherit;font-size:10px;color:#c9c9d0;background:none;border:1px solid rgba(255,255,255,.18);padding:8px 13px;cursor:pointer">test connection</button><span style="font-size:10px;color:#54545e;align-self:center">protocol v2 · streaming ok</span></div>
+
+          <div style="display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.16em;color:#6a6a74;margin-top:30px"><span>AUTH</span><span style="flex:1;height:1px;background:rgba(255,255,255,.08)"></span></div>
+          <div style="margin-top:14px"><div style="font-size:11px;color:#9a9aa4;margin-bottom:8px">api key</div>
+            <div style="display:flex;align-items:center;gap:9px;background:#0c0c10;border:1px solid rgba(255,255,255,.14);padding:11px 13px;font-size:12px"><span style="color:#6BA0D8">&gt;</span><span style="color:#7a7a84;letter-spacing:.14em">hm_••••••••••••3kf2</span><span style="margin-left:auto;color:#6BA0D8;font-size:10px;cursor:pointer">reveal</span></div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px"><span style="font-size:13px">unlock with biometrics</span><div style="width:40px;height:20px;border:1px solid #6BA0D8;background:rgba(107,160,216,.15);position:relative;flex:none"><div style="position:absolute;top:1px;right:1px;width:16px;height:16px;background:#6BA0D8;box-shadow:0 0 8px rgba(107,160,216,.6)"></div></div></div>
+          <div style="font-size:10px;color:#54545e;margin-top:6px">key stored in secure enclave · never synced</div>
+
+          <div style="display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.16em;color:#6a6a74;margin-top:30px"><span>AGENT</span><span style="flex:1;height:1px;background:rgba(255,255,255,.08)"></span></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px"><span style="font-size:13px">autonomy</span><div style="display:grid;grid-template-columns:repeat(3,1fr);border:1px solid rgba(255,255,255,.14)"><div style="text-align:center;padding:8px 12px;font-size:10px;color:#5c5c66;border-right:1px solid rgba(255,255,255,.1)">ask</div><div style="text-align:center;padding:8px 12px;font-size:10px;color:#6BA0D8;background:rgba(107,160,216,.1);border-right:1px solid rgba(255,255,255,.1)">balanced</div><div style="text-align:center;padding:8px 12px;font-size:10px;color:#5c5c66">auto</div></div></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px"><span style="font-size:13px">spend limit / action</span><span style="font-size:12px;color:#9a9aa4">100 chf</span></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px"><span style="font-size:13px">notify on</span><div style="display:grid;grid-template-columns:1fr 1fr;border:1px solid rgba(255,255,255,.14)"><div style="text-align:center;padding:8px 12px;font-size:10px;color:#6BA0D8;background:rgba(107,160,216,.1);border-right:1px solid rgba(255,255,255,.1)">needs me</div><div style="text-align:center;padding:8px 12px;font-size:10px;color:#5c5c66">everything</div></div></div>
+
+          <div style="display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.16em;color:#6a6a74;margin-top:30px"><span>DISPLAY</span><span style="flex:1;height:1px;background:rgba(255,255,255,.08)"></span></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px"><span style="font-size:13px">expand traces by default</span><div style="width:40px;height:20px;border:1px solid rgba(255,255,255,.18);position:relative;flex:none"><div style="position:absolute;top:1px;left:1px;width:16px;height:16px;background:#54545e"></div></div></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px"><span style="font-size:13px">show tool args in traces</span><div style="width:40px;height:20px;border:1px solid #6BA0D8;background:rgba(107,160,216,.15);position:relative;flex:none"><div style="position:absolute;top:1px;right:1px;width:16px;height:16px;background:#6BA0D8;box-shadow:0 0 8px rgba(107,160,216,.6)"></div></div></div>
+
+          <div style="display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.16em;color:#6a6a74;margin-top:30px"><span>DATA</span><span style="flex:1;height:1px;background:rgba(255,255,255,.08)"></span></div>
+          <div style="display:flex;gap:9px;margin-top:14px"><button style="font-family:inherit;font-size:11px;color:#c9c9d0;background:none;border:1px solid rgba(255,255,255,.18);padding:9px 14px;cursor:pointer">export threads</button><button style="font-family:inherit;font-size:11px;color:#d06a6a;background:none;border:1px solid rgba(208,106,106,.4);padding:9px 14px;cursor:pointer">clear all threads</button></div>
+        </div>
+        <div style="display:flex;border-top:1px solid rgba(255,255,255,.08);background:#0a0a0d">
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 0 12px;font-size:9px;letter-spacing:.1em;color:#5c5c66"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"><path d="M8 9h8"></path><path d="M8 13h6"></path><path d="M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1 -3 3h-5l-5 3v-3h-2a3 3 0 0 1 -3 -3v-8a3 3 0 0 1 3 -3h12z"></path></svg>threads</div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 0 12px;font-size:9px;letter-spacing:.1em;color:#5c5c66"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"><path d="M12 3l8 4.5v9l-8 4.5l-8 -4.5v-9l8 -4.5"></path><path d="M12 12l8 -4.5"></path><path d="M12 12v9"></path><path d="M12 12l-8 -4.5"></path></svg>agent</div>
+          <div style="position:relative;flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 0 12px;font-size:9px;letter-spacing:.1em;color:#6BA0D8"><span style="position:absolute;left:0;right:0;top:0;height:2px;background:#6BA0D8"></span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" stroke-linejoin="miter"><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z"></path><path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"></path></svg>config</div>
+        </div>
+      </div>
+      <div style="font-size:10px;color:#54545e;max-width:380px;line-height:1.7">server url + live connection status folded into the section rule · api key masked with reveal · autonomy + trace-display prefs wired to how <a class="dv-oid" href="#1c">1c</a>/<a class="dv-oid" href="#1d">1d</a> render.</div>
+    </div>
+
+  </div>
+  <p class="dv-next">Try next: "make <a class="dv-oid" href="#1a">1a</a>'s rows denser like <a class="dv-oid" href="#1b">1b</a>" · "riff on the trace expansion from <a class="dv-oid" href="#1c">1c</a> — 3 more treatments" · "add a streaming/running turn to <a class="dv-oid" href="#1c">1c</a>"</p>
+</section>
+
+<template id="__bundler_thumbnail" data-bg-color="#08080a">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#08080a"/>
+    <rect x="480" y="280" width="240" height="240" fill="none" stroke="#6BA0D8" stroke-width="10"/>
+    <rect x="520" y="330" width="120" height="14" fill="#6BA0D8"/>
+    <rect x="520" y="368" width="160" height="14" fill="#3a3a44"/>
+    <rect x="520" y="406" width="90" height="14" fill="#3a3a44"/>
+    <rect x="470" y="570" width="260" height="12" fill="#6BA0D8"/>
+  </svg>
+</template>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { open: {}, q: '', q2: '', avSel: 'a0', pins: { t1: true, t2: true, t3: false, t4: false, t5: false, t6: false, t7: false } };
+
+  threads() {
+    return [
+      { id: 't2', title: 'book train to geneva', preview: '2 options found — pick one to book', state: 'needs you', kind: 'wait', time: '08:52', unread: true },
+      { id: 't1', title: 'renew car insurance', preview: 'comparing quotes from 4 providers…', state: 'running · 3/5', kind: 'run', time: 'now', unread: false },
+      { id: 't3', title: 'morning digest', preview: '14 items · 3 flagged for you', state: 'done', kind: 'done', time: '07:00', unread: true },
+      { id: 't4', title: 'fix flaky ci pipeline', preview: 'root cause found · pr #482 merged', state: 'done', kind: 'done', time: 'yesterday', unread: false },
+      { id: 't5', title: 'plan lyon trip', preview: 'itinerary drafted · waiting on hotel prices', state: 'idle', kind: 'done', time: 'yesterday', unread: false },
+      { id: 't6', title: 'summarize q2 board notes', preview: '6 pages → 400 words · sent to notes', state: 'done', kind: 'done', time: 'jul 13', unread: false },
+      { id: 't7', title: 'monitor hn for llm articles', preview: 'recurring · next run 18:00', state: 'scheduled', kind: 'done', time: 'jul 11', unread: false }
+    ];
+  }
+
+  decorate(t) {
+    const accent = '#6BA0D8';
+    const kindStyles = {
+      run:  { dotBg: accent, dotBorder: accent, dotGlow: '0 0 8px rgba(107,160,216,.6)', stateColor: accent },
+      wait: { dotBg: '#d0a24c', dotBorder: '#d0a24c', dotGlow: '0 0 8px rgba(208,162,76,.5)', stateColor: '#d0a24c' },
+      done: { dotBg: 'transparent', dotBorder: '#54545e', dotGlow: 'none', stateColor: '#54545e' }
+    };
+    const ks = kindStyles[t.kind] || kindStyles.done;
+    return Object.assign({}, t, ks, {
+      running: t.kind === 'run',
+      titleColor: t.unread ? '#e6e6ea' : '#9a9aa4',
+      togglePin: () => this.setState(s => ({ pins: Object.assign({}, s.pins, { [t.id]: !s.pins[t.id] }) }))
+    });
+  }
+
+  flip(id) {
+    return () => this.setState(s => ({ open: Object.assign({}, s.open, { [id]: !s.open[id] }) }));
+  }
+
+  renderVals() {
+    const q = this.state.q.toLowerCase();
+    const all = this.threads().filter(t => !q || t.title.includes(q) || t.preview.includes(q)).map(t => this.decorate(t));
+    const pinnedThreads = all.filter(t => this.state.pins[t.id]);
+    const recentThreads = all.filter(t => !this.state.pins[t.id]);
+    const o = this.state.open;
+
+    // 2a: day-grouped with pinned fold, own filter
+    const q2 = this.state.q2.toLowerCase();
+    const days = { t1: 'today', t2: 'today', t3: 'today', t4: 'yesterday', t5: 'yesterday', t6: 'yesterday', t7: 'earlier' };
+    const all2 = this.threads().filter(t => !q2 || t.title.includes(q2) || t.preview.includes(q2)).map(t => this.decorate(t))
+      .map(t => Object.assign(t, {
+        pinGlyph: this.state.pins[t.id] ? '◆' : '◇',
+        pinColor: this.state.pins[t.id] ? '#6BA0D8' : '#2a2a32'
+      }));
+    const pinned2 = all2.filter(t => this.state.pins[t.id]);
+    const rest2 = all2.filter(t => !this.state.pins[t.id]);
+    const dayDefs = [['today', 'jul 14'], ['yesterday', 'jul 13'], ['earlier', '']];
+    const groups2 = [];
+    if (pinned2.length) groups2.push({ label: 'PINNED', right: '', count: pinned2.length, items: pinned2 });
+    for (const [key, right] of dayDefs) {
+      const items = rest2.filter(t => days[t.id] === key);
+      if (items.length) groups2.push({ label: key.toUpperCase(), right, count: items.length, items });
+    }
+
+    // 2d: avatar selection
+    const avIds = ['a0', 'a1', 'a2', 'a3', 'a4'];
+    const av = {}, avB = {}, avBg = {}, avC = {};
+    for (const id of avIds) {
+      const sel = this.state.avSel === id;
+      av[id] = () => this.setState({ avSel: id });
+      avB[id] = sel ? '#6BA0D8' : 'rgba(255,255,255,.12)';
+      avBg[id] = sel ? 'rgba(107,160,216,.12)' : 'transparent';
+      avC[id] = sel ? '#6BA0D8' : '#54545e';
+    }
+
+    return {
+      q2: this.state.q2,
+      onQ2: (e) => this.setState({ q2: e.target.value }),
+      groups2,
+      listCount2: all2.length,
+      noResults2: all2.length === 0,
+      av, avB, avBg, avC,
+      b1Arrow: o.b1 ? '▾' : '▸',
+      b2Arrow: o.b2 ? '▾' : '▸',
+      q: this.state.q,
+      onQ: (e) => this.setState({ q: e.target.value }),
+      pinnedThreads, recentThreads,
+      hasPinned: pinnedThreads.length > 0,
+      pinnedCount: pinnedThreads.length,
+      recentCount: recentThreads.length,
+      listCount: all.length,
+      noResults: all.length === 0,
+      open: o,
+      tg: { c1: this.flip('c1'), src: this.flip('src'), book: this.flip('book'), d1: this.flip('d1'), d2: this.flip('d2'), b1: this.flip('b1'), b2: this.flip('b2') },
+      c1Arrow: o.c1 ? '▾' : '▸',
+      srcArrow: o.src ? '▾' : '▸',
+      d1Arrow: o.d1 ? '▾' : '▸',
+      d2Arrow: o.d2 ? '▾' : '▸'
+    };
+  }
+}
+</script>
+</body>
+</html>
