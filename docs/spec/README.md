@@ -13,8 +13,8 @@ design handoff does not: the systems behind the screens.
 | Doc | Covers |
 |-----|--------|
 | [01-architecture.md](01-architecture.md) | Module/package layout, layers, DI, navigation, threading model |
-| [02-server-api.md](02-server-api.md) | Hermes gateway contract, connection lifecycle, streaming (SSE), live updates |
-| [03-sync-and-cache.md](03-sync-and-cache.md) | Room cache as source of truth, sync strategy, offline behavior, settings & key storage |
+| [02-server-api.md](02-server-api.md) | Hermes gateway contract (verified), async run lifecycle, run event stream, reconnect |
+| [03-sync-and-cache.md](03-sync-and-cache.md) | Room as system of record (no server thread store), running a turn, offline behavior, settings & key storage |
 | [04-error-handling.md](04-error-handling.md) | Error taxonomy, retry policy, connection status surface, per-action failure UX |
 | [05-markdown-rendering.md](05-markdown-rendering.md) | CommonMark → Compose pipeline, code/diff blocks, rich agent blocks, streaming render |
 | [06-compose-components.md](06-compose-components.md) | Theme & tokens in Compose, component catalog, motion, icons & glyphs |
@@ -31,9 +31,19 @@ design handoff does not: the systems behind the screens.
   provide a per-thread agent profile that overrides it.
 - Thinking traces render muted and **collapsed by default** (user preference can flip this).
 
+## Gateway (verified 2026-07-15)
+
+- Base URL **`https://api.gent.ino.ink`** (the `api.` subdomain; the bare host is a
+  separate cookie-SSO web UI — not our target). Auth is a shared static bearer token
+  (`Authorization: Bearer <key>`, from `.env` `HERMES_API_KEY` in dev). Gateway version
+  0.18.0, model `hermes-agent`.
+- The gateway is an **OpenAI-compatible async agent-run runner**, not a thread store:
+  `POST /v1/runs` starts a run, `GET /v1/runs/{id}/events` streams it. There is no thread
+  list, no global feed, no server-side history — **the app is the system of record** for
+  threads, and conversation history is sent by the client on each run. See
+  [02-server-api.md](02-server-api.md) for the full verified contract and
+  [03-sync-and-cache.md](03-sync-and-cache.md) for the storage model.
+
 ## Existing project facts
 
 - `net.liquidx.leman`, minSdk 34, targetSdk/compileSdk 36, Kotlin 2.2, Compose BOM 2025.12, AGP 9.
-- Gateway is OpenAI-compatible per the repo README; the thread/trace surface is a
-  Hermes extension — see [02-server-api.md](02-server-api.md) for the assumed contract
-  and how it is isolated so contract drift stays in one layer.

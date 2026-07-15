@@ -15,20 +15,28 @@ Deps: JUnit4, `kotlinx-coroutines-test`, Turbine (Flow assertions), MockWebServe
 ## Unit suites (JVM)
 
 **Wire / client (`data/remote`)** — against MockWebServer:
-- DTO decoding from fixture JSON: full thread, every turn kind, every block type,
-  unknown fields ignored, unknown enums → `Unknown` (not crash).
-- SSE `Flow` adapter: event parsing, heartbeat handling, `Last-Event-ID` sent on
-  reconnect, watchdog fires after 60s silence (virtual time), backoff sequence
-  1-2-4…30 with jitter bounds, backoff reset on success.
-- Error mapping table: socket failures → `Network`, 401 → `Auth`, 500 → `Server`,
-  garbage body → `Protocol`, each asserted through the public client API.
+- DTO decoding from fixture JSON: `HealthDto`, `RunAcceptedDto`, `RunDto` (running +
+  completed), unknown fields ignored, unknown `status`/event strings → `Unknown` (not crash).
+- Run event stream reader: parsing the gateway's **`data:`-only framing** (no `id:`/`event:`
+  lines; type is inside the JSON), each `RunEvent` variant, the trailing `: stream closed`
+  comment, and a malformed frame surviving as `Unknown` rather than crashing.
+- Reconnect semantics (virtual time): on stream re-open the accumulated text is **reset**
+  before replay (no double-append); backoff sequence 1-2-4…30 with jitter bounds, reset on
+  success; poll backstop (`GET /v1/runs/{id}`) recovers a run that finished while the
+  socket was gone.
+- Error mapping table: socket failures → `Network`, `401 invalid_api_key` → `Auth`,
+  `404 run_not_found` → `Client`, 5xx → `Server`, garbage body → `Protocol`, each asserted
+  through the public client API.
 
-**Sync (`data/repo`)** — fake client + in-memory Room:
-- Refresh reconciliation: upsert, prune deleted, `seq` conflict rule (stale upsert
-  dropped; client-owned `sendState` preserved).
-- Optimistic send lifecycle: provisional row → authoritative replacement by `client_id`;
-  failure → `failed`; retry reuses `client_id`; offline queue flushes in order.
-- Stream event application: `turn.completed` upserts; deltas never touch the DB.
+**Repository / runs (`data/repo`)** — fake client + in-memory Room:
+- `input` assembly: a thread's turns map to `[{role,content}]` in order; `trace` turns are
+  excluded; the new user message is appended last.
+- Run lifecycle: append `sending` user turn → `202` flips it to `synced` and stores
+  `run_id`/`session_id` → fold events → on `run.completed` persist the agent turn +
+  composed trace turn, bump `preview`/`lastActiveAt`, set `unread` when off-screen.
+- Failure: POST error or a `failed`/never-completing run → user turn `failed`, thread
+  `failed`; retry re-sends (a new run); no auto-retry of user actions.
+- Event application: deltas never touch the DB; only the finalized turn is persisted.
 
 **ViewModels** — Turbine over `state`:
 - Thread list: filter semantics (case-insensitive substring on title+preview), grouping
@@ -41,8 +49,10 @@ Deps: JUnit4, `kotlinx-coroutines-test`, Turbine (Flow assertions), MockWebServe
 **Markdown/blocks (`ui/markdown` parsing halves)**:
 - CommonMark → render-model snapshots over the fixture corpus (lists, tables, inline
   code, links, partial/unterminated input).
-- Diff line classification; trace rollup composer (`▸ trace · 9 steps · ci.logs ×3 …`)
-  including histogram ordering and duration formatting.
+- Diff line classification; trace composer that folds `reasoning.available` +
+  `tool.started`/`tool.completed` pairs into steps and the rollup
+  (`▸ trace · 6 steps · web_search ×4 …`), including histogram ordering, `error` steps,
+  `show_tool_args` gating, and duration formatting.
 
 ## Screenshot suite (Roborazzi, records to `app/src/test/screenshots/`)
 
@@ -63,10 +73,11 @@ Pixel fidelity is a stated requirement, so screenshots are the regression net fo
   glyph toggles without opening row (hit-area regression); trace line expands/collapses;
   action button appends `(via button)` turn; composer send disabled when unconfigured.
 - **E2E against the fake gateway** (08): app launched with `AppContainer` overridden to
-  the in-process `FakeHermesServer` — script: cold start → list renders from seed →
-  open thread → fake emits stream deltas → text appears incrementally → send message →
-  optimistic row reconciles. This one test exercises client, sync, cache, and UI
-  together and is the merge gate for streaming changes.
+  the in-process `FakeHermesServer` — script: cold start → list renders from the local seed
+  → open thread → send message → fake accepts a run and emits `message.delta` + tool/trace
+  events → text and trace appear incrementally → `run.completed` → agent turn + trace
+  persist. This one test exercises client, repository, store, and UI together and is the
+  merge gate for streaming changes.
 
 ## Fixtures
 

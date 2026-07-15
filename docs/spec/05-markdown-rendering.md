@@ -2,16 +2,20 @@
 
 ## Two layers of "rich"
 
-Agent turns carry two kinds of content (02):
+The verified gateway (02) returns an agent turn as a **single markdown string** (`output`
+/ `message.delta` text) — there is no structured block payload on the wire. So both layers
+below are produced **client-side** from that one string:
 
 1. **`markdown`** — prose CommonMark the agent writes. Rendered by our renderer with
    LeMan styling.
-2. **`blocks[]`** — structured payloads the gateway emits for interactive/rich elements:
-   action buttons, task/status lists, option tables, collapsible sections, code/diff
-   blocks with filenames. These are *not* parsed out of markdown; they arrive as typed
-   JSON and map 1:1 to design components. (If the gateway turns out to inline everything
-   in markdown, the block parser becomes a markdown post-processor behind the same
-   `List<AgentBlock>` domain model — renderer unaffected.)
+2. **`blocks[]`** — the richer design elements (fenced code/diff with filenames,
+   task/status lists, option tables, collapsible sections, and — where the agent emits a
+   recognized convention — action buttons). These are derived by a **markdown
+   post-processor** that segments the parsed CommonMark AST into the `List<AgentBlock>`
+   domain model. The renderer consumes only that model, so if a future gateway *does* start
+   emitting typed JSON blocks, only the producer changes — the renderer is unaffected.
+   Interactive action buttons depend on an agreed markdown/marker convention with the
+   agent; until one exists, agent output renders as prose + code/list/table blocks only.
 
 ```kotlin
 sealed interface AgentBlock {
@@ -81,35 +85,44 @@ Matches 2b exactly:
 
 ## Interactive blocks
 
-- **Actions**: square buttons per design (primary accent tint / neutral hairline /
-  dismissive faint). Tap → `ThreadEvent.ActionTapped(button)` → optimistic user turn
-  labeled `(via button)` + `POST messages { via_button: true }`. Buttons disable after
-  any sibling is tapped (single choice per action group; state derives from whether a
-  later user turn references the group).
+- **Actions** (only if an action-button convention with the agent exists — see above):
+  square buttons per design (primary accent tint / neutral hairline / dismissive faint).
+  Tap → `ThreadEvent.ActionTapped(button)` → a normal `sendMessage` with the button's
+  payload as the user turn (marked `viaButton` for the `(via button)` label), which starts
+  a new run (02/03). Buttons disable after any sibling is tapped (single choice per action
+  group; state derives from whether a later user turn references the group).
 - **Collapsible**: same `▸/▾` muted-line pattern as traces; body is a surface-bg
   `MarkdownBody`. Expansion state is UI-local (`rememberSaveable`), animates `riseIn`.
-- **TaskList / OptionTable**: pure display; live progress arrives as `turn.delta`
-  block updates during streaming and re-render.
+- **TaskList / OptionTable**: pure display, parsed from the agent's markdown. During a live
+  run they re-derive as `message.delta` text accumulates and the markdown is re-parsed.
 
 ## Thinking traces
 
-Traces are their own turn kind, not markdown (see component spec in 06 for visuals):
+Traces are their own turn kind, not markdown (see component spec in 06 for visuals). A
+trace is composed **client-side from run events** (02), not delivered as a structured blob:
 
-- Collapsed line text is composed client-side from the rollup:
-  `▸ trace · 9 steps · ci.logs ×3 · repo.search ×2 · 3m 12s` (histogram sorted by count
-  desc, top 2 tools, duration `Xm Ys`).
-- Expanded table renders `steps[]`; `argsSummary` respects the `show_tool_args` pref —
-  off means tool rows show the tool name + `→ result` only.
+- Each `tool.started`/`tool.completed` pair is one **tool step** — `tool` name,
+  `preview` (the args/query summary), `duration` seconds, and an `error` flag. Any
+  `reasoning.available` text becomes a **reasoning step** (or the trace's summary line).
+- Collapsed line text is composed from the rollup:
+  `▸ trace · 6 steps · web_search ×4 · repo.read ×2 · 3m 12s` (tool histogram from the
+  `tool` fields, sorted by count desc, top 2 tools; duration = sum of step `duration`s or
+  run wall-clock, formatted `Xm Ys`).
+- Expanded table renders the steps; the tool `preview` respects the `show_tool_args` pref —
+  off means tool rows show the tool name + `· 5.9s` timing only, no query text. A step with
+  `error:true` renders in danger.
 - Default expanded/collapsed comes from `expand_traces_by_default`; per-trace toggles
   override it for the session (`expandedTraces: Set<turnId>` in ViewModel state,
   survives rotation via `SavedStateHandle`).
-- A **live** trace (thread running, `trace.step` events arriving) shows the collapsed
-  line with a growing step count and pulsing accent `▸`; steps append with `riseIn` when
-  expanded.
+- A **live** trace (run in flight, `tool.started`/`reasoning.available` events arriving)
+  shows the collapsed line with a growing step count and pulsing accent `▸`; steps append
+  with `riseIn` when expanded.
+- A persisted trace whose full step detail wasn't captured can be re-fetched lazily by
+  replaying `GET /v1/runs/{runId}/events` on expand (02/03).
 
 ## Streaming render rules
 
-- `turn.delta` markdown accumulates in the ViewModel; `MarkdownBody` re-parses the
+- `message.delta` text accumulates in the ViewModel; `MarkdownBody` re-parses the
   accumulated string per frame-batch. CommonMark parses a few KB in <1ms — fine at the
   ~10 Hz deltas arrive. If profiling ever disagrees: parse only the tail paragraph
   (split on last `\n\n`), keep completed paragraphs' `AnnotatedString`s cached. Don't

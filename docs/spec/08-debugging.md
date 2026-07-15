@@ -11,11 +11,13 @@ Debug builds add a third tab `debug` to the tab bar (danger-colored icon so it c
 mistaken for product UI). It opens a DEBUG screen in the design language with sections:
 
 ### GATEWAY
-- Active target: real server URL vs **mock server** toggle (see below).
+- Active target: real server URL (`https://api.gent.ino.ink`) vs **mock server** toggle
+  (see below). Quick health readout from `GET /v1/health` (`platform · version`).
 - Connection state machine readout: current `ConnState`, last transition times, backoff
-  attempt counter.
-- Actions: `force reconnect` · `drop stream` (kills the SSE socket to exercise
-  reconnect) · `expire auth` (poisons the in-memory key to exercise 401 flow).
+  attempt counter, and the active run's `run_id`/status if one is in flight.
+- Actions: `force reconnect` · `drop run stream` (kills the `/v1/runs/{id}/events` socket
+  mid-run to exercise reconnect + replay) · `expire auth` (poisons the in-memory bearer
+  token to exercise the `401 invalid_api_key` flow).
 
 ### NETWORK LOG
 - Ring buffer (last 200) of REST calls: method, path, status, duration, byte sizes;
@@ -24,9 +26,10 @@ mistaken for product UI). It opens a DEBUG screen in the design language with se
 - `copy as curl` per request.
 
 ### EVENT CONSOLE
-- Live tail of SSE events (both streams): event name, seq, payload preview; pausable;
+- Live tail of run events (`message.delta` / `reasoning.available` / `tool.started` /
+  `tool.completed` / `run.completed`): event name, timestamp, payload preview; pausable;
   filter field (same `PromptField` component). Invaluable for contract drift against a
-  real gateway.
+  real gateway — this is where the non-standard `data:`-only framing (02) is eyeballed.
 
 ### CHAOS
 Fault injection flags (interceptor + fake-server hooks), each a `LemanToggle`:
@@ -51,17 +54,24 @@ Fault injection flags (interceptor + fake-server hooks), each a `LemanToggle`:
 An in-process fake implementing the `HermesClient` interface (swapped via
 `AppContainer.Overrides`) — not a socket server, so it's trivially usable from
 instrumented tests and has zero-latency determinism, while the chaos flags reintroduce
-latency when wanted.
+latency when wanted. It mirrors the real contract (02): `POST /v1/runs` returns a `run_id`,
+and `GET /v1/runs/{id}/events` emits the real event vocabulary and **replays** for a
+finished run.
 
-- Seeded from the shared fixture corpus (07) — boots the app looking exactly like the
-  design mocks.
-- **Scripted scenarios**, selectable in the GATEWAY section:
-  - `demo` — static handoff data.
-  - `streaming` — a running thread emits `turn.delta`/`trace.step` on a timer
-    (replays the "fix flaky ci" conversation in real time).
-  - `needs-you` — a thread flips to `needs_you` 10s after launch with action buttons.
-  - `hostile` — slow, flaky, occasionally malformed; long titles, 4-page markdown,
-    50-step traces, emoji, RTL text.
+- Because threads are local (03), the fake only needs to answer runs; the thread list is
+  seeded straight into Room from the shared fixture corpus (07) so the app boots looking
+  exactly like the design mocks.
+- **Scripted run scenarios**, selectable in the GATEWAY section:
+  - `demo` — completes instantly with canned `output` (+ a canned trace) so screens match
+    the handoff.
+  - `streaming` — emits `message.delta` + interleaved `tool.started`/`tool.completed` and
+    `reasoning.available` on a timer, then `run.completed` (replays the "fix flaky ci"
+    turn in real time).
+  - `needs-you` — completes with an agent turn that ends in a question / renders action
+    buttons (the `needs_you` look is now a client-side thread state, 03).
+  - `hostile` — slow, flaky, `tool.completed{error:true}` steps, occasional malformed
+    frame (exercises the defensive parser), long output, 50-step traces, emoji, RTL text,
+    and a stream that drops before `run.completed` (exercises the poll backstop).
 - Also the backend for the e2e instrumented test and for screenshot recording of
   streaming states.
 

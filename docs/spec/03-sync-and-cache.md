@@ -1,54 +1,78 @@
-# 03 — Sync & local cache
+# 03 — Local store, runs & settings
 
-## Principle: cache is the source of truth for the UI
+## Principle: the app is the system of record
 
-Compose never renders network responses directly. The network writes into Room; the UI
-observes Room `Flow`s. This gives instant cold-start rendering, offline reading, one
-consistency point, and makes streaming/optimistic updates ordinary cache writes.
+The gateway has **no thread store** (02). It runs agent turns and forgets them; the only
+server-side artifacts are short-lived `run` objects. Therefore **Room is primary storage,
+not a cache** — a thread exists because the app created a row for it, not because the
+server has one. This changes the earlier "cache mirrors server" model: there is nothing to
+reconcile, no server-wins-by-`seq`, no prune-deleted pass, no global event upserts.
+
+Compose still never renders network responses directly. Runs write into Room via the
+repository; the UI observes Room `Flow`s. This gives instant cold start, offline reading,
+and one consistency point.
 
 ```
-HermesClient ──▶ SyncEngine ──▶ Room ──Flow──▶ ViewModel ──▶ Compose
-                    ▲                             │
-                    └──────── user actions ◀──────┘
+                    ┌─────────── POST /v1/runs + /events (per active run)
+                    ▼
+RunController ──▶ ThreadRepository ──▶ Room ──Flow──▶ ViewModel ──▶ Compose
+                    ▲                                   │
+                    └──────────── user actions ◀────────┘
 ```
+
+## What a "thread" is
+
+A thread is a **local conversation**: an ordered list of user + agent turns (agent turns
+may carry a trace), plus a `sessionId` for correlating server runs. To advance it, the
+repository maps the thread's turns to `input = [{role,content}, …]`, appends the new user
+message, and starts a run (02). Nothing about the thread lives on the server between runs.
 
 ## Room schema
 
 ```kotlin
 @Entity(tableName = "threads")
 data class ThreadEntity(
-    @PrimaryKey val id: String,
-    val title: String, val preview: String,
-    val state: String, val progressStep: Int?, val progressTotal: Int?,
-    val unread: Boolean, val pinned: Boolean,
-    val lastActiveAt: Long, val seq: Long,
-    val agentName: String?, val agentGlyph: String?, val agentProfileLabel: String?,
+    @PrimaryKey val id: String,               // client-generated UUID
+    val title: String,                        // derived from first user message (editable later)
+    val preview: String,                      // last turn snippet, maintained on write
+    val state: String,                        // idle | running | failed  (client-owned)
+    val pinned: Boolean,
+    val unread: Boolean,                      // set when a run completes off-screen
+    val createdAt: Long,
+    val lastActiveAt: Long,                   // orders the list; bumped on every turn
+    val sessionId: String?,                   // last run's session_id, for correlation
+    val agentName: String?, val agentGlyph: String?,   // per-thread identity override
 )
 
 @Entity(tableName = "turns",
         primaryKeys = ["id"],
         indices = [Index("threadId", "seq")])
 data class TurnEntity(
-    val id: String, val threadId: String, val seq: Long,
-    val kind: String,                       // user | agent | trace
-    val createdAt: Long, val viaButton: Boolean,
-    val markdown: String?,
-    val blocksJson: String?,                // structured blocks, serialized as-is
-    val traceJson: String?,                 // TraceDto serialized; parsed lazily on expand
-    val sendState: String,                  // synced | sending | failed  (user turns only)
-    val clientId: String?,                  // reconciliation key for optimistic sends
+    val id: String, val threadId: String,
+    val seq: Long,                            // client-assigned, monotonic within thread — ordering only
+    val kind: String,                         // user | agent | trace
+    val createdAt: Long,
+    val markdown: String?,                    // user text / agent output
+    val blocksJson: String?,                  // structured agent blocks if any (05)
+    val traceJson: String?,                   // finalized trace (reasoning + tool steps), one column
+    val runId: String?,                       // the server run that produced an agent/trace turn
+    val sendState: String,                    // synced | sending | failed   (user turns)
+    val viaButton: Boolean,
 )
 ```
 
 Notes:
 
-- Trace steps stay as one JSON column, not a `trace_steps` table. They are read-only,
-  always loaded with their turn, and never queried individually — a table adds joins for
-  nothing. Same for rich blocks.
-- `seq` ordering (not timestamps) orders turns and drives incremental fetch
-  (`turns?after_seq=`).
-- DB version 1; `fallbackToDestructiveMigration` is acceptable **only until first
-  release**, then real migrations + a schema-export CI check (07).
+- `seq` is **client-assigned** (there is no server sequence to honor) — a per-thread
+  counter, `maxSeq + 1` on append. It orders turns and nothing else.
+- Trace steps and rich blocks stay as **one JSON column each**, not side tables — read-only,
+  always loaded with their turn, never queried individually.
+- A `trace` turn's `traceJson` is composed from the run's `reasoning.available` text plus
+  the `tool.started`/`tool.completed` pairs (02, 05). If a live run's trace wasn't fully
+  captured (e.g. app killed mid-run), `runId` lets the app re-fetch it later by replaying
+  `/v1/runs/{runId}/events` (02).
+- DB version 1; `fallbackToDestructiveMigration` acceptable **only until first release**,
+  then real migrations + schema-export CI check (07).
 
 ### DAO essentials
 
@@ -59,86 +83,88 @@ fun observeThreads(): Flow<List<ThreadEntity>>
 @Query("SELECT * FROM turns WHERE threadId = :id ORDER BY seq")
 fun observeTurns(id: String): Flow<List<TurnEntity>>
 
-@Upsert suspend fun upsertThreads(items: List<ThreadEntity>)
-@Upsert suspend fun upsertTurns(items: List<TurnEntity>)
 @Query("SELECT MAX(seq) FROM turns WHERE threadId = :id") suspend fun maxSeq(id: String): Long?
+@Upsert suspend fun upsertThread(t: ThreadEntity)
+@Upsert suspend fun upsertTurns(items: List<TurnEntity>)
+@Query("DELETE FROM threads WHERE id = :id") suspend fun deleteThread(id: String)
 ```
 
 Filtering (2a) and day-grouping (`PINNED / TODAY / YESTERDAY / EARLIER`) happen in the
-ViewModel over the observed list — dataset is small, and substring-match semantics stay
-in Kotlin where they're unit-testable.
+ViewModel over the observed list — the dataset is small and local, and substring-match
+semantics stay in Kotlin where they're unit-testable.
 
-## SyncEngine
+## Running a turn (replaces "sync")
 
-Lifecycle-scoped orchestrator (runs while app is `STARTED`):
+`ThreadRepository.sendMessage(threadId, text, viaButton = false)`:
 
-1. On start: `refreshThreads()` — fetch first page, upsert, prune threads deleted
-   server-side (full-list reconcile; dataset is small).
-2. Open global event stream → upsert per event (02).
-3. `watchThread(id)` while thread 2b is visible: catch-up fetch `after_seq = maxSeq(id)`,
-   then per-thread stream; `turn.completed` events upsert turns.
-4. Marks thread read (`unread = false`) when its screen is opened; PATCHes server if the
-   contract supports it, else local-only.
+1. Append a user `TurnEntity` immediately: `seq = maxSeq + 1`, `sendState = sending`. UI
+   shows it at once. Bump the thread to `state = running`, `lastActiveAt = now`.
+2. Build `input` from all prior turns of the thread (user/agent → `{role,content}`; trace
+   turns are **not** sent) + this user message.
+3. `POST /v1/runs` (02). On `202`, store the `run_id`/`session_id` on the thread; flip the
+   user turn to `sendState = synced`.
+4. Open `/v1/runs/{id}/events`; fold into an in-memory streaming agent turn + live trace
+   (05). The DB is **not** written per delta.
+5. On `run.completed`: persist the finalized agent turn (`markdown = output`, `runId`) and,
+   if any reasoning/tool events occurred, a `trace` turn (`traceJson`). Set thread
+   `state = idle`, update `preview`, set `unread` if the thread isn't on screen.
+6. On failure (POST error, stream dies with no completion and the poll backstop shows
+   `failed`): user turn → `sendState = failed`; thread → `state = failed`; surface per 04.
+   **User actions never auto-retry** — the failed turn shows a `retry` affordance (04).
+   Retry re-sends the same message (a new run; runs aren't idempotent server-side, but the
+   app controls whether a retry happens, so there are no silent duplicates).
 
-All writes funnel through `SyncEngine`/repository so conflict rules live in one place:
-**server wins by `seq`** — an upsert with `seq <= existing.seq` is dropped, except
-`sendState`/`clientId` which are client-owned.
+Creating a thread (2c) is the first `sendMessage` against a freshly inserted
+`ThreadEntity`; the title is derived from that first message. It is a local insert followed
+by a normal run — no server "create thread" call exists.
 
-## Optimistic sends
+## Pins, read, delete — all local
 
-`sendMessage(threadId, text)`:
-
-1. Insert user `TurnEntity` immediately: `seq = maxSeq + 1` (provisional),
-   `sendState = sending`, fresh `clientId`. UI shows it instantly.
-2. `POST /messages`. On success the authoritative turn arrives (response or stream) with
-   the same `clientId` → replace provisional row (delete + upsert authoritative).
-3. On failure → `sendState = failed`; row renders with a danger marker + `retry` action
-   (04). Retry re-POSTs with the **same** `clientId` (server-side idempotency key).
-
-New-thread creation (2c) is not optimistic — it's a navigation event. Show the composer's
-send-in-progress state; navigate to `thread/{id}` when `POST /v1/threads` returns.
-
-## Pins & read state
-
-Assume server-side flags via `PATCH` (02). If the gateway lacks them, they become
-local-only columns and survive refreshes because refresh upserts never overwrite
-client-owned fields. Either way pin toggling is optimistic with rollback on failure.
+- `pinned`, `unread`, `title` edits, and thread deletion are **purely local** columns/ops;
+  there is no server state to PATCH. Toggling is instant, no network, no rollback path.
+- "clear all threads" (2d) wipes local tables only — there is nothing server-side to
+  delete. It is still a confirm-guarded destructive action.
+- `export threads` serializes the local store to a JSON share-sheet payload (works
+  offline) — the app is the only place the data exists, so export matters more here.
 
 ## Settings — DataStore (Preferences)
 
 | Key | Default | Screen |
 |-----|---------|--------|
-| `server_url` | `""` | 2d SERVER |
+| `server_url` | `https://api.gent.ino.ink` | 2d SERVER |
 | `agent_name` | `juno` | 2d AGENT IDENTITY |
 | `agent_glyph` | `✳` (one of `✳ ◆ ▲ ● ⌬`) | 2d |
 | `biometric_unlock` | `false` | 2d AUTH |
 | `expand_traces_by_default` | `false` | 2d DISPLAY → drives 2b trace default |
-| `show_tool_args` | `true` | 2d DISPLAY → drives trace row rendering |
+| `show_tool_args` | `true` | 2d DISPLAY → drives `tool.preview` visibility in trace rows |
 
-Exposed as `Flow<Settings>`; ViewModels combine it into `UiState`. Per-thread agent
-profile from the API overrides the configured default identity when present.
+Exposed as `Flow<Settings>`; ViewModels combine it into `UiState`. `agent_name`/`glyph`
+are display identity only — the model id sent to the gateway is always `hermes-agent`
+(02). A per-thread override (stored on `ThreadEntity`) beats the global default.
 
 ## API key — Keystore-backed
 
-The design copy promises "key stored in secure enclave · never synced":
+The design copy promises "key stored in secure enclave · never synced". The key is the
+shared Hermes bearer token (02):
 
 - AES-256-GCM key in **AndroidKeystore** (`setUserAuthenticationRequired(true)` when the
-  biometrics toggle is on, with a 30s validity window so one prompt covers a burst of
-  requests).
-- The API key string is encrypted with that key; ciphertext + IV stored in a separate
-  DataStore file **excluded from Android Auto Backup and device transfer** (update
-  `backup_rules.xml` / `data_extraction_rules.xml`).
-- `ApiKeyStore` API: `suspend fun get(): String?`, `suspend fun set(value: String)`,
-  `suspend fun clear()`. Decrypted value is held in memory by `ConnectionManager` only.
+  biometrics toggle is on, 30s validity window so one prompt covers a burst of requests).
+- The bearer token is encrypted with that key; ciphertext + IV in a DataStore file
+  **excluded from Auto Backup / device transfer** (`backup_rules.xml`,
+  `data_extraction_rules.xml`).
+- `ApiKeyStore`: `suspend fun get(): String?`, `set(value)`, `clear()`. Decrypted value is
+  held in memory by `ConnectionManager` only, and masked in all logs (08).
 - `reveal` in 2d re-triggers `BiometricPrompt` when biometric unlock is on.
-- Keystore key invalidated (e.g. biometrics re-enrolled) → treat as missing key: clear,
-  surface `Failed(Auth)` state, direct user to 2d.
+- Keystore key invalidated (biometrics re-enrolled) → treat as missing key: clear, surface
+  `Unauthorized`, direct the user to 2d.
 
 ## Offline behavior
 
-- Everything cached is readable offline; status row shows `▪ hermes · offline` (faint dot).
-- Composers stay enabled; sends queue as `sending` rows and are retried on reconnect
-  (single in-order flush per thread by provisional `seq`).
-- "clear all threads" (2d) requires connectivity — it is destructive and server-first:
-  `DELETE` server, then wipe local tables on success. `export threads` serializes from
-  the **local cache** to a JSON share-sheet payload, so it works offline.
+- Everything is local, so the entire app is readable offline; the status row shows
+  `▪ hermes · offline` (faint dot) once a health probe fails.
+- Composers stay enabled; a send while offline lands as a `sending` user turn and the run
+  is attempted — it fails fast to `failed` with a `retry` affordance (no background queue;
+  the user decides when to retry, consistent with "user actions never auto-retry", 04).
+- Because there is no server copy, local data loss is unrecoverable — hence export, the
+  backup-exclusion caveat notwithstanding (the *key* is excluded from backup; thread data
+  is ordinary app storage the user can export).

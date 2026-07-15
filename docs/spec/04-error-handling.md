@@ -30,10 +30,11 @@ for one-shot calls; streams emit `ConnState` transitions instead of throwing.
 | `Client` 4xx | no | surface; usually a contract bug — log loudly in debug |
 | `Protocol` | no | surface + log payload snippet in debug builds only |
 
-Retries are owned by `SyncEngine`/`ConnectionManager` (background refresh, streams) and
-are invisible except through the status dot. **User-initiated actions never auto-retry**
-(a send or pin either succeeds or shows a retry affordance) — silent replays of
-user intent are how duplicate bookings happen. Idempotent replays use `client_id` (03).
+Auto-retries apply only to connection-level probes (`ConnectionManager`) and a run's event
+stream reconnect (02) — invisible except through the status dot. **User-initiated actions
+never auto-retry** (a send either succeeds or shows a retry affordance) — silent replays of
+user intent are how duplicate work happens. Runs are not idempotent server-side, so the app
+guarantees no duplicates by only ever re-running on an explicit user retry (03).
 
 ## Where errors surface (by design language)
 
@@ -43,7 +44,7 @@ The design has no toasts, snackbars, or dialogs. Errors are rendered in-system:
 
 | State | Rendering (micro type, 9px) |
 |-------|------------------------------|
-| Connected | `▪ hermes · connected` — accent dot |
+| Connected | `▪ hermes · 0.18.0` (health `version`) or `· connected` — accent dot |
 | Connecting/reconnecting | `▪ hermes · connecting…` — warn `#D0A24C` dot |
 | Offline (network) | `▪ hermes · offline` — faint `#54545E` dot |
 | Auth failed | `▪ hermes · auth failed` — danger `#D06A6A` dot |
@@ -60,16 +61,22 @@ the `no threads match "q"` empty-state pattern:
 
 **3. Failed send (2b)** — the optimistic user turn stays in the log; its left border
 switches to danger `#D06A6A`, meta line reads `▪ failed · retry / discard` (retry accent,
-discard faint). Tapping retry re-sends with the same `client_id`.
+discard faint). Tapping retry starts a fresh run for the same message (03); discard removes
+the pending user turn.
 
-**4. Mid-stream failure (2b)** — a streaming agent turn that dies keeps accumulated
-text, appends a faint marker line `▪ stream interrupted · reconnecting…`, and the
-watchdog/backoff reconnects. On catch-up fetch the authoritative turn replaces it.
+**4. Mid-stream failure (2b)** — a run's event stream that dies keeps accumulated text,
+appends a faint marker line `▪ stream interrupted · reconnecting…`, and the backoff
+reconnects. Recovery polls `GET /v1/runs/{id}`: if the run finished, its `output` replaces
+the accumulated text; if still running, the stream re-opens and **replays from the start**,
+so the client resets accumulated text and rebuilds (02). If the run itself failed
+(`status:"failed"` or the poll keeps erroring), the turn settles into the failed-send
+treatment above.
 
-**5. Config screen (2d)** — `test connection` reports below the button in the caption
-slot: `protocol v2 · streaming ok` (ok, faint) / `▪ unreachable · timed out after 10s`
-(warn) / `▪ auth failed · check api key` (danger). Saving a malformed URL validates
-locally first (`https` scheme + host) with an 11px danger caption under the field.
+**5. Config screen (2d)** — `test connection` does `GET /v1/health` and reports below the
+button in the caption slot: `hermes-agent · v0.18.0` (ok, faint — from the health
+`platform`/`version`) / `▪ unreachable · timed out after 10s` (warn) / `▪ auth failed ·
+check api key` (danger). Saving a malformed URL validates locally first (`https` scheme +
+host) with an 11px danger caption under the field; the default is `https://api.gent.ino.ink`.
 
 **6. Auth failure global behavior** — streams closed, sync paused, every status row goes
 danger. The thread list shows one inline line under the tick strip:
@@ -85,7 +92,9 @@ danger. The thread list shows one inline line under the tick strip:
 
 ## Watchdogs & edge timings
 
-- SSE liveness: 60s silence → reconnect (02).
+- Run-stream liveness: the server sends no keepalive, so there is no fixed silence
+  watchdog; a run producing no events for a long time is checked via `GET /v1/runs/{id}`
+  (02) rather than assumed dead.
 - Health probe on `STARTED` has a 5s timeout so the status row settles fast.
 - Backoff resets on any successful request, not only stream establishment.
 - Clock skew: all "TODAY / YESTERDAY" grouping uses device-local calendar on

@@ -16,10 +16,10 @@ net.liquidx.leman
 │   ├── model/                   Thread, Turn, TraceStep, AgentProfile, ThreadState…
 │   └── …                        small use-case helpers where logic outgrows repos
 ├── data/
-│   ├── remote/                  Hermes client: DTOs, SSE, mapping → domain (02)
+│   ├── remote/                  Hermes client: DTOs, run event stream, mapping → domain (02)
 │   ├── local/                   Room db: entities, DAOs, mapping → domain (03)
 │   ├── settings/                DataStore prefs + Keystore-encrypted API key (03)
-│   └── repo/                    ThreadRepository, ConnectionManager, SyncEngine
+│   └── repo/                    ThreadRepository, ConnectionManager, RunController
 ├── ui/
 │   ├── theme/                   LemanTheme: colors, type, motion tokens (06)
 │   ├── components/              design-system composables (06)
@@ -37,8 +37,8 @@ net.liquidx.leman
 - `domain` imports nothing from `data` or `ui`. Models are immutable `data class`es.
 - `ui` talks only to `data/repo` (repositories + `ConnectionManager`), never to
   `remote`/`local` directly.
-- `data/remote` is the **only** place that knows the Hermes wire format. DTOs never
-  leak past the repository boundary.
+- `data/remote` is the **only** place that knows the Hermes wire format (the run-runner
+  API and its `data:`-only event framing, 02). DTOs never leak past the repository boundary.
 - All I/O is `suspend` or `Flow`; nothing blocks the main thread. Repositories are
   main-safe (they internally dispatch to `Dispatchers.IO`).
 
@@ -54,15 +54,17 @@ class ThreadViewModel(...) : ViewModel() {
 ```
 
 `UiState` is a plain data class — always renderable (loading/empty/error are states,
-not exceptions). ViewModels combine flows from Room (cached truth) with connection
-status; they never hold data the cache doesn't.
+not exceptions). ViewModels combine flows from Room (the system of record, 03) with
+connection status and any in-flight run's streaming state; they never hold data the store
+doesn't, except the transient streaming turn/trace of an active run (persisted on
+completion).
 
 ```
-   Room (Flow) ──┐
-   ConnState  ───┼── combine ──▶ UiState ──▶ Compose
-   prefs      ───┘                    ▲
-                                      │ events
-   SyncEngine ◀── repository ◀────────┘
+   Room (Flow) ─────┐
+   ConnState  ──────┼── combine ──▶ UiState ──▶ Compose
+   prefs      ──────┤                    ▲
+   streaming run ───┘                    │ events
+   RunController ◀── repository ◀────────┘
 ```
 
 ## Dependency injection
@@ -78,8 +80,7 @@ class AppContainer(context: Context, overrides: Overrides = Overrides()) {
     val db: LemanDatabase by lazy { … }
     val hermesClient: HermesClient by lazy { … }        // interface; fake in debug/tests
     val connectionManager: ConnectionManager by lazy { … }
-    val threadRepository: ThreadRepository by lazy { … }
-    val syncEngine: SyncEngine by lazy { … }
+    val threadRepository: ThreadRepository by lazy { … }  // owns per-run RunControllers
 }
 ```
 
@@ -107,12 +108,15 @@ mechanical"; no slide-in-from-right).
 
 - **Foreground-first.** LeMan is a viewer/remote-control; the *agent* runs server-side.
   No WorkManager jobs, no foreground services in v0.1.
-- `SyncEngine` runs while the app is `STARTED` (lifecycle-scoped): refresh thread list on
-  start, open the global event stream, open a per-thread stream for the visible thread
-  (see 02). Everything is torn down on `STOP`; on restart, cache renders instantly and
-  sync catches up.
-- Push notifications for `needs_you` transitions are a later milestone (requires gateway
-  support); the design accounts for it only via the deep link above.
+- The thread list is local (03), so cold start renders instantly from Room with no network.
+  There is no global stream to open — the only live socket is a run's event stream (02),
+  opened when the user sends a message and held while that run is in flight on the visible
+  thread. It is torn down on `STOP`; an unfinished run is recovered on return via
+  `GET /v1/runs/{id}` and a stream re-open (which replays), see 02.
+- A run started while the app is foregrounded but then backgrounded keeps running
+  server-side; on return the app polls the run and replays its events to catch up. Truly
+  detached background completion + push notification is a later milestone (needs gateway
+  push support); the design accounts for it only via the `leman://thread/{id}` deep link.
 
 ## New dependencies this spec introduces
 
@@ -120,7 +124,7 @@ All stable, added to `libs.versions.toml`:
 
 | Dep | For |
 |-----|-----|
-| `com.squareup.okhttp3:okhttp` + `okhttp-sse` | HTTP + SSE streaming (02) |
+| `com.squareup.okhttp3:okhttp` | HTTP + run event streaming (02). The event stream uses non-standard `data:`-only framing, so it's read with a hand-rolled line reader over the response body rather than `okhttp-sse` |
 | `org.jetbrains.kotlinx:kotlinx-serialization-json` | wire JSON (02) |
 | `androidx.room:room-runtime/-ktx` + KSP compiler | local cache (03) |
 | `androidx.datastore:datastore-preferences` | settings (03) |
@@ -130,6 +134,8 @@ All stable, added to `libs.versions.toml`:
 | `org.commonmark:commonmark` (+ tables ext) | markdown parsing (05) |
 | test/debug only: `mockwebserver`, `turbine`, `room-testing`, `kotlinx-coroutines-test`, Roborazzi + Robolectric | (07, 08) |
 
-Deliberately **not** used: Retrofit (three endpoints + SSE — OkHttp directly is less
-machinery), Hilt (see above), Coil (no images anywhere in the design), Markwon
-(View-based; we render markdown natively in Compose, see 05).
+Deliberately **not** used: Retrofit (a handful of endpoints + a custom event stream —
+OkHttp directly is less machinery), `okhttp-sse` (the gateway's `data:`-only framing isn't
+standard SSE; a small custom reader is clearer and testable), Hilt (see above), Coil (no
+images anywhere in the design), Markwon (View-based; we render markdown natively in
+Compose, see 05).
