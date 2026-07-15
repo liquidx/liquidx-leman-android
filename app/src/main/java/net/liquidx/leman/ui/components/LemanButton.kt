@@ -42,6 +42,7 @@ fun LemanButton(
         color = text.copy(alpha = text.alpha * alpha),
         maxLines = 1,
         softWrap = false,
+        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         modifier = modifier
             .background(fill)
             .hairlineBorder(border.copy(alpha = border.alpha * alpha))
