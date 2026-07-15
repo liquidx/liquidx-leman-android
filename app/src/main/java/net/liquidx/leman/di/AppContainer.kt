@@ -25,6 +25,9 @@ interface DebugHooks {
     val extraTabs: List<LemanTab> get() = emptyList()
     fun interceptors(): List<okhttp3.Interceptor> = emptyList()
     fun attach(container: AppContainer) {}
+
+    /** Lets debug builds swap in the in-process fake gateway at runtime (spec 08). */
+    fun wrapClient(real: HermesClient): HermesClient = real
     fun registerDestinations(builder: NavGraphBuilder, navController: NavController) {}
 }
 
@@ -57,10 +60,13 @@ class AppContainer(
     val db: LemanDatabase by lazy { overrides.db ?: LemanDatabase.build(appContext) }
 
     val hermesClient: HermesClient by lazy {
-        overrides.hermesClient ?: OkHttpHermesClient(
-            userAgent = "leman-android/${BuildConfig.VERSION_NAME}",
-            interceptors = debugHooks?.interceptors().orEmpty(),
-        )
+        overrides.hermesClient ?: run {
+            val real = OkHttpHermesClient(
+                userAgent = "leman-android/${BuildConfig.VERSION_NAME}",
+                interceptors = debugHooks?.interceptors().orEmpty(),
+            )
+            debugHooks?.wrapClient(real) ?: real
+        }
     }
 
     val connectionManager: ConnectionManager by lazy {
