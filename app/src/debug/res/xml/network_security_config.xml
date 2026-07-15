@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug-only (spec 08): cleartext for the emulator loopback and LAN gateways.
+     Android's config can't express RFC1918 CIDR ranges, so debug builds permit
+     cleartext globally; release builds carry no config and stay TLS-only. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
