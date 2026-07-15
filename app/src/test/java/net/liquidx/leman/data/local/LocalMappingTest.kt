@@ -4,6 +4,7 @@ import net.liquidx.leman.domain.model.SendState
 import net.liquidx.leman.domain.model.ThreadState
 import net.liquidx.leman.domain.model.Trace
 import net.liquidx.leman.domain.model.TraceStep
+import net.liquidx.leman.domain.model.TraceStepKind
 import net.liquidx.leman.domain.model.TurnKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -14,10 +15,10 @@ class LocalMappingTest {
     @Test
     fun traceJson_roundTrips() {
         val trace = Trace(
-            reasoning = "thinking about ci",
             steps = listOf(
-                TraceStep("ci.logs", "fetch last 20 runs", 5.939, false),
-                TraceStep("repo.search", null, 3.2, true),
+                TraceStep(TraceStepKind.Reasoning, summary = "thinking about ci"),
+                TraceStep(TraceStepKind.Tool, tool = "ci.logs", summary = "fetch last 20 runs", durationSeconds = 5.939),
+                TraceStep(TraceStepKind.Tool, tool = "repo.search", summary = null, durationSeconds = 3.2, error = true),
             ),
         )
         assertEquals(trace, decodeTrace(encodeTrace(trace)))

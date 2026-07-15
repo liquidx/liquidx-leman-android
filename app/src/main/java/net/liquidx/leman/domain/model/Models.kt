@@ -52,20 +52,26 @@ data class Turn(
 
 /**
  * A finalized thinking trace, composed client-side from run events (spec 05).
+ * Ordered steps of tool calls and reasoning rows — the design's trace table.
  * Serializable because it persists as one JSON column on the turn (spec 03).
  */
 @kotlinx.serialization.Serializable
 data class Trace(
-    val reasoning: String?,
     val steps: List<TraceStep>,
 )
 
 @kotlinx.serialization.Serializable
+enum class TraceStepKind { Tool, Reasoning }
+
+@kotlinx.serialization.Serializable
 data class TraceStep(
-    val tool: String,
-    val preview: String?,
-    val durationSeconds: Double,
-    val error: Boolean,
+    val kind: TraceStepKind,
+    /** Tool name for [TraceStepKind.Tool] steps; null for reasoning rows. */
+    val tool: String? = null,
+    /** Tool args/query preview, or the reasoning text. */
+    val summary: String? = null,
+    val durationSeconds: Double = 0.0,
+    val error: Boolean = false,
 )
 
 data class TokenUsage(
