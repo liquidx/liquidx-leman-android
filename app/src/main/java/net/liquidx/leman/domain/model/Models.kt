@@ -50,12 +50,17 @@ data class Turn(
     val viaButton: Boolean,
 )
 
-/** A finalized thinking trace, composed client-side from run events (spec 05). */
+/**
+ * A finalized thinking trace, composed client-side from run events (spec 05).
+ * Serializable because it persists as one JSON column on the turn (spec 03).
+ */
+@kotlinx.serialization.Serializable
 data class Trace(
     val reasoning: String?,
     val steps: List<TraceStep>,
 )
 
+@kotlinx.serialization.Serializable
 data class TraceStep(
     val tool: String,
     val preview: String?,
