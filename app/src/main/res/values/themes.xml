@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.LeMan" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.LeMan" parent="android:Theme.Material.NoActionBar">
+        <!-- dark window background so cold start doesn't flash white -->
+        <item name="android:windowBackground">@color/leman_base</item>
+    </style>
 </resources>

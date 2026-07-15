@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- debug launcher icon tinted warn amber so installs are distinguishable (spec 08) -->
+    <color name="launcher_glyph">#FFD0A24C</color>
+</resources>
