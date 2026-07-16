@@ -65,13 +65,19 @@ class ThreadRepository(
 
     private val activeRuns = mutableMapOf<String, Job>()
 
+    // Bridges the gap between createSession() returning and launchChat() registering
+    // an activeRuns entry: a concurrent sync tick's stale listSessions snapshot can
+    // lack the brand-new session and would otherwise delete the just-upserted local
+    // row out from under sendMessage (spec §2 review, fix 2).
+    private val protectedThreads = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
     @Volatile
     private var visibleThreadId: String? = null
 
     val syncer = SessionSyncer(
         db = db,
         client = client,
-        isRunActive = { activeRuns[it]?.isActive == true },
+        isRunActive = { activeRuns[it]?.isActive == true || it in protectedThreads },
         visibleThreadId = { visibleThreadId },
     )
 
@@ -96,24 +102,31 @@ class ThreadRepository(
                 return null
             }
         }
-        val now = clock()
-        threadDao.upsertThread(
-            ThreadEntity(
-                id = session.id,
-                title = firstMessage.snippet(80),
-                preview = firstMessage.snippet(120),
-                state = "idle",
-                pinned = false,
-                unread = false,
-                createdAt = now,
-                lastActiveAt = now,
-                source = session.source,
-                agentName = profile?.name,
-                agentGlyph = profile?.glyph,
-            ),
-        )
-        sendMessage(session.id, firstMessage)
-        return session.id
+        protectedThreads.add(session.id)
+        try {
+            val now = clock()
+            threadDao.upsertThread(
+                ThreadEntity(
+                    id = session.id,
+                    title = firstMessage.snippet(80),
+                    preview = firstMessage.snippet(120),
+                    state = "idle",
+                    pinned = false,
+                    unread = false,
+                    createdAt = now,
+                    lastActiveAt = now,
+                    source = session.source,
+                    agentName = profile?.name,
+                    agentGlyph = profile?.glyph,
+                ),
+            )
+            sendMessage(session.id, firstMessage)
+            return session.id
+        } finally {
+            // By now sendMessage's launchChat has registered activeRuns[session.id],
+            // so the syncer's isRunActive guard covers the thread from here on.
+            protectedThreads.remove(session.id)
+        }
     }
 
     suspend fun sendMessage(threadId: String, text: String, viaButton: Boolean = false) {
@@ -380,6 +393,10 @@ class ThreadRepository(
                         // One transaction: observers never see the mid-rebuild empty state.
                         // Unsynced local turns (a still-failed/sending user message) survive
                         // the rebuild, appended past the rebuilt max seq with sendState intact.
+                        // (Narrow window: if the server acked but this run's runId never
+                        // persisted locally before the crash/drop, the preserved local copy
+                        // and the now-rebuilt server copy can both surface as a visible
+                        // duplicate — accepted trade-off.)
                         db.withTransaction {
                             val preserved =
                                 turnDao.getTurns(threadId).filter { it.sendState != "synced" }
@@ -400,6 +417,12 @@ class ThreadRepository(
                                 )
                             }
                         }
+                        // Mirror chatTurn's post-finalize sync: freshen serverLastActive now
+                        // (guarded so a newer job, e.g. a retry, isn't clobbered) so the next
+                        // 30s tick doesn't see a stale change-key and re-mark this
+                        // content-identical thread unread.
+                        if (activeRuns[threadId] === coroutineContext[Job]) activeRuns.remove(threadId)
+                        syncNow()
                         clearStreaming(threadId)
                         return
                     }

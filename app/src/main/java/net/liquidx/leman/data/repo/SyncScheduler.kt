@@ -31,7 +31,11 @@ class SyncScheduler(
                 // Online. runCatching so an unexpected throw in syncNow can't kill the
                 // loop (or, via the appScope, crash the process).
                 connState.first { it is ConnState.Online }
+                // runCatching must not swallow cancellation — rethrow it so the loop's
+                // own cancellation (e.g. onBackground()) still propagates cleanly rather
+                // than being treated as a caught syncNow failure.
                 runCatching { syncNow() }
+                    .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
                 delay(intervalMillis)
             }
         }

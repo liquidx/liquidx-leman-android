@@ -75,7 +75,10 @@ class SessionSyncer(
             // One transaction: observers never see a thread whose turns were deleted
             // but not yet rebuilt. Unsynced local turns (a sending/failed user message
             // the server hasn't accepted) are carried across the rebuild so the retry
-            // affordance survives — appended past the rebuilt max seq.
+            // affordance survives — appended past the rebuilt max seq. (Narrow window:
+            // if the server acked but this run's runId never persisted locally before a
+            // crash/drop, the preserved local copy and the now-rebuilt server copy can
+            // both surface as a visible duplicate — accepted trade-off.)
             db.withTransaction {
                 val preserved =
                     turnDao.getTurns(session.id).filter { it.sendState != "synced" }

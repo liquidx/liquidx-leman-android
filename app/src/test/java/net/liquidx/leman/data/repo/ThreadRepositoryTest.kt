@@ -144,6 +144,35 @@ class ThreadRepositoryTest {
     }
 
     @Test
+    fun createThread_survivesConcurrentSyncDeletePass_beforeRunRegistered() = runTest {
+        // Race: createThread upserts the local row after createSession, but activeRuns
+        // only gets an entry once sendMessage's launchChat runs. A concurrent sync tick
+        // whose stale listSessions snapshot omits the brand-new session must not delete
+        // that row out from under it — protectedThreads must cover this window.
+        client.createSessionResult = ApiResult.Ok(SessionDto(id = "s_new"))
+        client.chatScripts.add(
+            listOf(RunEvent.RunStarted("r1", 1.0), RunEvent.RunCompleted("hi there", null, 2.0)),
+        )
+        // First listSessions call (the racing tick) sees a stale snapshot that omits the
+        // brand-new session, as if it were taken just before createSession() returned.
+        // Later calls (the run's own post-finalize reconcile, etc.) see the server's
+        // now-accurate state, which does include it — the last entry repeats.
+        client.listSessionsResults.add(ApiResult.Ok(SessionListDto(data = emptyList(), hasMore = false)))
+        client.listSessionsResults.add(
+            ApiResult.Ok(SessionListDto(data = listOf(SessionDto(id = "s_new")), hasMore = false)),
+        )
+        val repo = repo()
+
+        // Both queued before either runs: the test scheduler interleaves them across the
+        // Room dispatch points inside createThread, landing the race sync mid-flight.
+        launch { repo.createThread("first message") }
+        launch { repo.syncNow() }
+        advanceUntilIdle()
+
+        assertNotNull(repo.observeThreads().first().find { it.id == "s_new" })
+    }
+
+    @Test
     fun createThread_sessionCreateFails_returnsNull_noThreadRow() = runTest {
         client.createSessionResult = ApiResult.Err(ApiError.Network(IOException("down")))
         val repo = repo()
@@ -314,6 +343,51 @@ class ThreadRepositoryTest {
         advanceUntilIdle()
 
         assertTrue(repo.observeThreads().first().isEmpty())
+    }
+
+    @Test
+    fun recoverByPolling_success_freshensSyncKey_soNextTickDoesNotFlipUnread() = runTest {
+        // Regression: recoverByPolling used to rebuild turns on success but never touch
+        // serverLastActive or run a post-recovery sync. A later, unrelated syncNow() tick
+        // (server state unchanged) would then see the stale change-key, rebuild the
+        // content-identical thread, and re-mark it unread purely because the user had
+        // since navigated away.
+        client.createSessionResult = ApiResult.Ok(SessionDto(id = "s1"))
+        client.chatScripts.add(
+            listOf(
+                RunEvent.RunStarted("r1", 1.0),
+                HermesStreamException(ApiError.Network(IOException("drop"))),
+            ),
+        )
+        client.messagesBySession["s1"] = ApiResult.Ok(
+            listOf(
+                SessionMessageDto(1, "user", "hi", timestamp = 1.0),
+                SessionMessageDto(2, "assistant", "recovered answer", timestamp = 5.0, finishReason = "stop"),
+            ),
+        )
+        // Same server state repeats for every listSessions call, including the fix's own
+        // post-recovery sync and the later manual tick simulated below.
+        client.listSessionsResults.add(
+            ApiResult.Ok(
+                SessionListDto(
+                    data = listOf(SessionDto(id = "s1", startedAt = 0.0, lastActive = 5.0)),
+                    hasMore = false,
+                ),
+            ),
+        )
+        val repo = repo()
+        repo.setVisibleThread("s1")
+        repo.createThread("hi")
+        advanceUntilIdle()
+        assertEquals(ThreadState.Idle, repo.observeThreads().first().single().state)
+        assertFalse(repo.observeThreads().first().single().unread)
+
+        // User navigates away, then the next 30s tick fires with nothing new server-side.
+        repo.setVisibleThread(null)
+        repo.syncNow()
+        advanceUntilIdle()
+
+        assertFalse(repo.observeThreads().first().single().unread)
     }
 
     @Test

@@ -276,6 +276,20 @@ class SessionSyncerTest {
     }
 
     @Test
+    fun authoritativeEmptyList_deletesAllLocalThreads() = runTest {
+        // An explicitly-scripted Ok(empty) is an authoritative "server has zero
+        // sessions" response and must reconcile-delete every local thread — distinct
+        // from the fake's unscripted-default Err, which is a no-op precisely so
+        // incidental syncs in non-syncer tests can't accidentally wipe local state.
+        seedThread("a", lastActiveAt = 100_000)
+        seedThread("b", lastActiveAt = 200_000)
+        client.listSessionsResults.add(ApiResult.Ok(SessionListDto()))
+        assertTrue(syncer().syncOnce() is ApiResult.Ok)
+        assertNull(db.threadDao().getThread("a"))
+        assertNull(db.threadDao().getThread("b"))
+    }
+
+    @Test
     fun pagination_followsHasMore() = runTest {
         client.listSessionsResults.add(
             ApiResult.Ok(SessionListDto(data = listOf(session("s1", 100.0)), hasMore = true)),
