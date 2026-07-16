@@ -12,6 +12,7 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.JsonPrimitive
 import net.liquidx.leman.data.remote.CapabilitiesDto
 import net.liquidx.leman.domain.model.ApiError
 import net.liquidx.leman.domain.model.ApiResult
@@ -124,6 +125,35 @@ class ConnectionManagerTest {
         cm.reconfigure()
         advanceUntilIdle()
         assertTrue(cm.state.value is ConnState.Unsupported)
+        scope.cancel()
+    }
+
+    @Test
+    fun capabilitiesNetworkError_goesOffline_andRetriesUntilOnline() = runTest {
+        val scope = managerScope()
+        val client = FakeHermesClient()
+        // Health is fine, but the capabilities probe hits a transient network error:
+        // this must NOT dead-end the feature as Unsupported — go Offline and retry.
+        client.capabilitiesResult = ApiResult.Err(ApiError.Network(IOException("caps down")))
+        val cm = manager(scope, client)
+        cm.reconfigure()
+        runCurrent()
+        assertTrue(cm.state.value is ConnState.Offline)
+        val callsBefore = client.healthCalls
+
+        // Capabilities recovers; the scheduled retry re-probes and reaches Online.
+        client.capabilitiesResult = ApiResult.Ok(
+            CapabilitiesDto(
+                features = mapOf(
+                    "session_resources" to JsonPrimitive(true),
+                    "session_chat_streaming" to JsonPrimitive(true),
+                ),
+            ),
+        )
+        advanceTimeBy(2_000) // backoff base 1s ±20% elapses
+        runCurrent()
+        assertTrue(client.healthCalls > callsBefore) // a retry was scheduled and ran
+        assertEquals(ConnState.Online("0.18.0"), cm.state.value)
         scope.cancel()
     }
 

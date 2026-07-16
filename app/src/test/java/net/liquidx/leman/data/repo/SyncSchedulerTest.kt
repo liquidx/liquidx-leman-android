@@ -72,7 +72,7 @@ class SyncSchedulerTest {
     }
 
     @Test
-    fun offline_ticksSkipSync() = runTest {
+    fun offline_waitsForOnline_thenSyncsImmediatelyOnTransition() = runTest {
         val scope = schedulerScope()
         val connState = MutableStateFlow<ConnState>(ConnState.Offline(ApiError.Timeout))
         var syncCalls = 0
@@ -85,17 +85,48 @@ class SyncSchedulerTest {
 
         scheduler.onForeground()
         runCurrent()
-        assertEquals(0, syncCalls)
+        assertEquals(0, syncCalls) // suspended waiting for Online — no polling ticks
 
-        advanceTimeBy(30_000)
+        advanceTimeBy(90_000)
         runCurrent()
-        assertEquals(0, syncCalls)
+        assertEquals(0, syncCalls) // still offline: interval elapsing changes nothing
 
-        // Comes online mid-flight: the next tick should sync.
+        // Coming Online resumes the wait and syncs at once — no full-interval delay.
         connState.value = ConnState.Online("0.18.0")
-        advanceTimeBy(30_000)
         runCurrent()
         assertEquals(1, syncCalls)
+
+        // Then keeps ticking every interval while Online.
+        advanceTimeBy(30_000)
+        runCurrent()
+        assertEquals(2, syncCalls)
+
+        scope.cancel()
+    }
+
+    @Test
+    fun throwingSyncNow_doesNotStopSubsequentTicks() = runTest {
+        val scope = schedulerScope()
+        val connState = MutableStateFlow<ConnState>(ConnState.Online("0.18.0"))
+        var attempts = 0
+        val scheduler = SyncScheduler(
+            syncNow = { attempts++; throw RuntimeException("boom") },
+            connState = connState,
+            scope = scope,
+            intervalMillis = 30_000,
+        )
+
+        scheduler.onForeground()
+        runCurrent()
+        assertEquals(1, attempts) // first attempt threw but was swallowed
+
+        advanceTimeBy(30_000)
+        runCurrent()
+        assertEquals(2, attempts) // loop survived the throw and ticked again
+
+        advanceTimeBy(30_000)
+        runCurrent()
+        assertEquals(3, attempts)
 
         scope.cancel()
     }

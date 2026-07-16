@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import net.liquidx.leman.domain.model.ConnState
 
@@ -24,7 +25,13 @@ class SyncScheduler(
         job?.cancel()
         job = scope.launch {
             while (true) {
-                if (connState.value is ConnState.Online) syncNow()
+                // Suspend until Online rather than skip-and-poll — this fires the first
+                // sync the instant the gateway comes up (e.g. Checking→Online after
+                // install), not a full interval later. Returns immediately if already
+                // Online. runCatching so an unexpected throw in syncNow can't kill the
+                // loop (or, via the appScope, crash the process).
+                connState.first { it is ConnState.Online }
+                runCatching { syncNow() }
                 delay(intervalMillis)
             }
         }

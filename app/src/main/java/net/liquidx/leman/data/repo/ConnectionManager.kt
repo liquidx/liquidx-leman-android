@@ -71,27 +71,54 @@ class ConnectionManager(
     private suspend fun applyResult(result: ApiResult<HealthDto>, scheduleRetry: Boolean) {
         when (result) {
             is ApiResult.Ok -> {
-                backoff.reset()
-                val caps = client.capabilities()
-                _state.value = if (caps is ApiResult.Ok && caps.value.supportsSessions) {
-                    ConnState.Online(result.value.version)
-                } else {
-                    ConnState.Unsupported(result.value.version)
+                val version = result.value.version
+                when (val caps = client.capabilities()) {
+                    // Capabilities reachable → a definitive answer either way.
+                    is ApiResult.Ok -> {
+                        backoff.reset()
+                        _state.value = if (caps.value.supportsSessions) {
+                            ConnState.Online(version)
+                        } else {
+                            ConnState.Unsupported(version)
+                        }
+                    }
+                    is ApiResult.Err -> when (val error = caps.error) {
+                        is ApiError.Auth -> {
+                            backoff.reset()
+                            _state.value = ConnState.Unauthorized(error)
+                        }
+                        ApiError.NotConfigured -> {
+                            backoff.reset()
+                            _state.value = ConnState.NotConfigured
+                        }
+                        // A client-class miss (e.g. 404) means an old gateway with no
+                        // capabilities endpoint — genuinely, definitively unsupported.
+                        is ApiError.Client -> {
+                            backoff.reset()
+                            _state.value = ConnState.Unsupported(version)
+                        }
+                        // Network/timeout/server-class: transient. Don't dead-end the
+                        // whole feature on a blip — go Offline and retry like a health
+                        // failure, letting the backoff grow across attempts.
+                        else -> goOffline(error, scheduleRetry)
+                    }
                 }
             }
             is ApiResult.Err -> when (val error = result.error) {
                 is ApiError.Auth -> _state.value = ConnState.Unauthorized(error)
                 ApiError.NotConfigured -> _state.value = ConnState.NotConfigured
-                else -> {
-                    _state.value = ConnState.Offline(error)
-                    if (scheduleRetry) {
-                        retryJob?.cancel()
-                        retryJob = scope.launch {
-                            delay(backoff.nextDelayMillis())
-                            probeInternal()
-                        }
-                    }
-                }
+                else -> goOffline(error, scheduleRetry)
+            }
+        }
+    }
+
+    private fun goOffline(error: ApiError, scheduleRetry: Boolean) {
+        _state.value = ConnState.Offline(error)
+        if (scheduleRetry) {
+            retryJob?.cancel()
+            retryJob = scope.launch {
+                delay(backoff.nextDelayMillis())
+                probeInternal()
             }
         }
     }
