@@ -1,6 +1,8 @@
 package net.liquidx.leman.data.repo
 
+import androidx.room.withTransaction
 import java.util.UUID
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -314,6 +316,12 @@ class ThreadRepository(
         try {
             completed?.let {
                 finalize(threadId, runId, it.output, events)
+                // Retire our own run from the active set BEFORE syncing so the syncer
+                // reconciles *this* thread now (temp-id turns → msg-id turns) while it's
+                // likely still visible — otherwise isRunActive would skip it and the swap
+                // would defer to an arbitrary later tick. Guard against clobbering a newer
+                // job (e.g. a retry) launched onto this thread meanwhile.
+                if (activeRuns[threadId] === coroutineContext[Job]) activeRuns.remove(threadId)
                 syncNow() // reconcile ids + siblings right after our own run (spec §2)
                 return
             }
@@ -364,21 +372,33 @@ class ThreadRepository(
                         it.role == "assistant" && !it.content.isNullOrEmpty()
                     }
                     if (replied) {
-                        turnDao.deleteTurnsFor(threadId)
-                        turnDao.upsertTurns(sessionTurns(threadId, messages))
                         val now = clock()
-                        threadDao.getThread(threadId)?.let {
-                            threadDao.upsertThread(
-                                it.copy(
-                                    state = "idle",
-                                    preview = (
-                                        messages.lastOrNull { m -> !m.content.isNullOrEmpty() }
-                                            ?.content ?: ""
-                                        ).snippet(120),
-                                    lastActiveAt = now,
-                                    unread = visibleThreadId != threadId,
-                                ),
-                            )
+                        val rebuilt = sessionTurns(threadId, messages)
+                        val newPreview = (
+                            messages.lastOrNull { m -> !m.content.isNullOrEmpty() }?.content ?: ""
+                            ).snippet(120)
+                        // One transaction: observers never see the mid-rebuild empty state.
+                        // Unsynced local turns (a still-failed/sending user message) survive
+                        // the rebuild, appended past the rebuilt max seq with sendState intact.
+                        db.withTransaction {
+                            val preserved =
+                                turnDao.getTurns(threadId).filter { it.sendState != "synced" }
+                            turnDao.deleteTurnsFor(threadId)
+                            turnDao.upsertTurns(rebuilt)
+                            if (preserved.isNotEmpty()) {
+                                var seq = rebuilt.maxOfOrNull { it.seq } ?: 0L
+                                turnDao.upsertTurns(preserved.map { it.copy(seq = ++seq) })
+                            }
+                            threadDao.getThread(threadId)?.let {
+                                threadDao.upsertThread(
+                                    it.copy(
+                                        state = "idle",
+                                        preview = newPreview,
+                                        lastActiveAt = now,
+                                        unread = visibleThreadId != threadId,
+                                    ),
+                                )
+                            }
                         }
                         clearStreaming(threadId)
                         return

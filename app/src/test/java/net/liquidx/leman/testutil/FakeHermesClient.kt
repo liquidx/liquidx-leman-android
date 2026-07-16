@@ -62,7 +62,11 @@ class FakeHermesClient : HermesClient {
     override suspend fun listSessions(limit: Int, offset: Int): ApiResult<SessionListDto> {
         listSessionsCalls++
         return when {
-            listSessionsResults.isEmpty() -> ApiResult.Ok(SessionListDto())
+            // Unscripted → a benign Err so an incidental syncNow (e.g. the post-run
+            // reconcile in chatTurn) is a no-op rather than an *authoritative* empty
+            // list that would reconcile-delete every local thread. Tests that exercise
+            // the syncer always script listSessionsResults.
+            listSessionsResults.isEmpty() -> ApiResult.Err(ApiError.NotConfigured)
             listSessionsResults.size > 1 -> listSessionsResults.removeFirst()
             else -> listSessionsResults.first()
         }

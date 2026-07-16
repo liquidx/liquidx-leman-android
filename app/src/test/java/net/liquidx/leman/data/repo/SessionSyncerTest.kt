@@ -52,7 +52,11 @@ class SessionSyncerTest {
             db = Room.inMemoryDatabaseBuilder(
                 ApplicationProvider.getApplicationContext(),
                 LemanDatabase::class.java,
-            ).setQueryCoroutineContext(dispatcher).build()
+            )
+                // withTransaction's blocking beginTransaction() asserts off-main-thread;
+                // the test scheduler runs on the main thread, so relax that here.
+                .allowMainThreadQueries()
+                .setQueryCoroutineContext(dispatcher).build()
         }
         return db
     }
@@ -78,12 +82,14 @@ class SessionSyncerTest {
         pinned: Boolean = false,
         agentName: String? = null,
         agentGlyph: String? = null,
+        serverLastActive: Long = 0,
+        unread: Boolean = false,
     ) = database().threadDao().upsertThread(
         ThreadEntity(
             id = id, title = "local title", preview = "local preview", state = "idle",
-            pinned = pinned, unread = false, createdAt = lastActiveAt - 1_000,
+            pinned = pinned, unread = unread, createdAt = lastActiveAt - 1_000,
             lastActiveAt = lastActiveAt, source = "api_server",
-            agentName = agentName, agentGlyph = agentGlyph,
+            agentName = agentName, agentGlyph = agentGlyph, serverLastActive = serverLastActive,
         ),
     )
 
@@ -157,13 +163,78 @@ class SessionSyncerTest {
 
     @Test
     fun unchangedSession_skipsMessagesFetch() = runTest {
-        seedThread("run_x", lastActiveAt = 200_000)
+        // serverLastActive snapshot equals the server's current last_active → skip.
+        seedThread("run_x", lastActiveAt = 200_000, serverLastActive = 200_000)
         client.listSessionsResults.add(
             ApiResult.Ok(SessionListDto(data = listOf(session("run_x", 200.0)), hasMore = false)),
         )
         assertTrue(syncer().syncOnce() is ApiResult.Ok)
         assertEquals(0, client.sessionMessagesCalls)
         assertNotNull(db.threadDao().getThread("run_x"))
+    }
+
+    @Test
+    fun serverLastActiveMatches_skipsDespiteLocalClockSkew() = runTest {
+        // The app bumped lastActiveAt off its own clock (way past the server value),
+        // but the server's last_active is unchanged since the last sync. Keying on
+        // serverLastActive (not lastActiveAt) means no rebuild and no messages fetch.
+        seedThread("run_x", lastActiveAt = 999_999_999, serverLastActive = 200_000)
+        client.listSessionsResults.add(
+            ApiResult.Ok(SessionListDto(data = listOf(session("run_x", 200.0)), hasMore = false)),
+        )
+        assertTrue(syncer().syncOnce() is ApiResult.Ok)
+        assertEquals(0, client.sessionMessagesCalls)
+        val thread = db.threadDao().getThread("run_x")!!
+        assertEquals(999_999_999L, thread.lastActiveAt) // untouched by the skipped tick
+    }
+
+    @Test
+    fun appFinalizedThread_unchangedServer_notReMarkedUnread() = runTest {
+        // A thread the app just finalized: read, lastActiveAt on the local clock, and
+        // serverLastActive snapshotting the server's last_active. A tick with the same
+        // server state must not rebuild it and must not spuriously flip it to unread.
+        seedThread(
+            "run_x", lastActiveAt = 500_000, serverLastActive = 200_000, unread = false,
+        )
+        client.listSessionsResults.add(
+            ApiResult.Ok(SessionListDto(data = listOf(session("run_x", 200.0)), hasMore = false)),
+        )
+        assertTrue(syncer(visible = null).syncOnce() is ApiResult.Ok)
+        assertEquals(0, client.sessionMessagesCalls)
+        assertFalse(db.threadDao().getThread("run_x")!!.unread)
+    }
+
+    @Test
+    fun unsyncedTurn_survivesRebuild_withSendStateIntact() = runTest {
+        seedThread("run_x", lastActiveAt = 100_000)
+        // A user message that never reached the server (failed) sits alongside stale
+        // synced content that the rebuild will replace.
+        seedTurn("run_x", id = "stale-synced")
+        database().turnDao().upsertTurn(
+            TurnEntity(
+                id = "failed-1", threadId = "run_x", seq = 9, kind = "user", createdAt = 60_000,
+                markdown = "did not send", blocksJson = null, traceJson = null, runId = null,
+                sendState = "failed", viaButton = false,
+            ),
+        )
+        client.listSessionsResults.add(
+            ApiResult.Ok(SessionListDto(data = listOf(session("run_x", 200.0)), hasMore = false)),
+        )
+        client.messagesBySession["run_x"] = ApiResult.Ok(
+            listOf(
+                SessionMessageDto(1, "user", "question", timestamp = 190.0),
+                SessionMessageDto(2, "assistant", "answer", timestamp = 195.0),
+            ),
+        )
+        assertTrue(syncer().syncOnce() is ApiResult.Ok)
+        val turns = db.turnDao().getTurns("run_x")
+        assertTrue(turns.none { it.id == "stale-synced" }) // synced stale row gone
+        val failed = turns.last()
+        assertEquals("failed-1", failed.id) // preserved, appended last
+        assertEquals("did not send", failed.markdown)
+        assertEquals("failed", failed.sendState)
+        // seq continues past the rebuilt server turns.
+        assertTrue(failed.seq > turns.filter { it.id != "failed-1" }.maxOf { it.seq })
     }
 
     @Test

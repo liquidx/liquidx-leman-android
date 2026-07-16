@@ -1,5 +1,6 @@
 package net.liquidx.leman.data.repo
 
+import androidx.room.withTransaction
 import net.liquidx.leman.data.local.LemanDatabase
 import net.liquidx.leman.data.local.ThreadEntity
 import net.liquidx.leman.data.remote.HermesClient
@@ -43,7 +44,10 @@ class SessionSyncer(
             if (isRunActive(session.id)) continue
             val local = threadDao.getThread(session.id)
             val lastActiveMs = (session.lastActive * 1000).toLong()
-            if (local != null && local.lastActiveAt == lastActiveMs) continue
+            // Change-detection keys on the *server's* last_active, snapshotted at the
+            // previous sync — never the app-bumped lastActiveAt, which drifts off the
+            // local clock and would rebuild every app-touched thread on every tick.
+            if (local != null && local.serverLastActive == lastActiveMs) continue
 
             val messages = when (val result = client.sessionMessages(session.id)) {
                 is ApiResult.Err -> continue // partial sync is fine; next tick retries
@@ -52,25 +56,37 @@ class SessionSyncer(
             val turns = sessionTurns(session.id, messages)
             val lastMarkdown = turns.lastOrNull { it.markdown != null }?.markdown
             val firstUser = turns.firstOrNull { it.kind == "user" }?.markdown
-            threadDao.upsertThread(
-                ThreadEntity(
-                    id = session.id,
-                    title = session.title ?: (firstUser ?: session.preview.orEmpty()).snippet(80),
-                    preview = (lastMarkdown ?: session.preview.orEmpty()).snippet(120),
-                    state = "idle",
-                    pinned = local?.pinned ?: false,
-                    // brand-new rows arrive read (first sync would otherwise flood);
-                    // an advance on a known thread is unread unless it's on screen
-                    unread = local != null && visibleThreadId() != session.id,
-                    createdAt = (session.startedAt * 1000).toLong(),
-                    lastActiveAt = lastActiveMs,
-                    source = session.source,
-                    agentName = local?.agentName,
-                    agentGlyph = local?.agentGlyph,
-                ),
+            val rebuilt = ThreadEntity(
+                id = session.id,
+                title = session.title ?: (firstUser ?: session.preview.orEmpty()).snippet(80),
+                preview = (lastMarkdown ?: session.preview.orEmpty()).snippet(120),
+                state = "idle",
+                pinned = local?.pinned ?: false,
+                // brand-new rows arrive read (first sync would otherwise flood);
+                // an advance on a known thread is unread unless it's on screen
+                unread = local != null && visibleThreadId() != session.id,
+                createdAt = (session.startedAt * 1000).toLong(),
+                lastActiveAt = lastActiveMs,
+                source = session.source,
+                agentName = local?.agentName,
+                agentGlyph = local?.agentGlyph,
+                serverLastActive = lastActiveMs,
             )
-            turnDao.deleteTurnsFor(session.id)
-            turnDao.upsertTurns(turns)
+            // One transaction: observers never see a thread whose turns were deleted
+            // but not yet rebuilt. Unsynced local turns (a sending/failed user message
+            // the server hasn't accepted) are carried across the rebuild so the retry
+            // affordance survives — appended past the rebuilt max seq.
+            db.withTransaction {
+                val preserved =
+                    turnDao.getTurns(session.id).filter { it.sendState != "synced" }
+                threadDao.upsertThread(rebuilt)
+                turnDao.deleteTurnsFor(session.id)
+                turnDao.upsertTurns(turns)
+                if (preserved.isNotEmpty()) {
+                    var seq = turns.maxOfOrNull { it.seq } ?: 0L
+                    turnDao.upsertTurns(preserved.map { it.copy(seq = ++seq) })
+                }
+            }
         }
         return ApiResult.Ok(Unit)
     }

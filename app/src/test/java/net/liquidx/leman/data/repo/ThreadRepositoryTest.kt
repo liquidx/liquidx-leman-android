@@ -13,6 +13,7 @@ import net.liquidx.leman.data.local.ThreadEntity
 import net.liquidx.leman.data.local.TurnEntity
 import net.liquidx.leman.data.remote.HermesStreamException
 import net.liquidx.leman.data.remote.SessionDto
+import net.liquidx.leman.data.remote.SessionListDto
 import net.liquidx.leman.data.remote.SessionMessageDto
 import net.liquidx.leman.domain.model.ApiError
 import net.liquidx.leman.domain.model.ApiResult
@@ -62,7 +63,11 @@ class ThreadRepositoryTest {
         db = Room.inMemoryDatabaseBuilder(
             ApplicationProvider.getApplicationContext(),
             LemanDatabase::class.java,
-        ).setQueryCoroutineContext(dispatcher).build()
+        )
+            // withTransaction's blocking beginTransaction() asserts off-main-thread;
+            // the test scheduler runs on the main thread, so relax that here.
+            .allowMainThreadQueries()
+            .setQueryCoroutineContext(dispatcher).build()
         var id = 0
         return ThreadRepository(
             db = db,
@@ -505,6 +510,43 @@ class ThreadRepositoryTest {
         repo.createThread("q")
         advanceUntilIdle()
         assertTrue(client.listSessionsCalls >= 1)
+    }
+
+    @Test
+    fun runCompletion_reconcilesOwnThreadToMessageIdRows_staysReadWhileVisible() = runTest {
+        // The post-run syncNow() must reconcile *this* thread immediately (chatTurn
+        // drops it from activeRuns first), swapping the run's temp-id turns for the
+        // server's deterministic msg-id rows — and, because the thread is visible, it
+        // must not be flipped to unread.
+        client.createSessionResult = ApiResult.Ok(SessionDto(id = "s1"))
+        client.chatScripts.add(
+            listOf(RunEvent.RunStarted("r1", 1.0), RunEvent.RunCompleted("the answer", null, 2.0)),
+        )
+        client.messagesBySession["s1"] = ApiResult.Ok(
+            listOf(
+                SessionMessageDto(1, "user", "my question", timestamp = 10.0),
+                SessionMessageDto(2, "assistant", "the answer", timestamp = 11.0, finishReason = "stop"),
+            ),
+        )
+        client.listSessionsResults.add(
+            ApiResult.Ok(
+                SessionListDto(
+                    data = listOf(SessionDto(id = "s1", startedAt = 9.0, lastActive = 11.0)),
+                    hasMore = false,
+                ),
+            ),
+        )
+        val repo = repo()
+        repo.setVisibleThread("s1")
+        repo.createThread("my question")
+        advanceUntilIdle()
+
+        val turns = repo.observeTurns("s1").first()
+        assertTrue(turns.isNotEmpty())
+        // Reconciled to server message ids, not the run's local temp ids.
+        assertTrue(turns.all { it.id.startsWith("msg-s1-") || it.id.startsWith("trace-s1-") })
+        assertEquals("the answer", turns.last { it.kind == TurnKind.Agent }.markdown)
+        assertFalse(repo.observeThreads().first().single().unread)
     }
 
     @Test

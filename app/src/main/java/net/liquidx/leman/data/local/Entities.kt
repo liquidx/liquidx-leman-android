@@ -19,6 +19,11 @@ data class ThreadEntity(
     val source: String,                  // api_server | cron | cli — server-owned (spec 03)
     val agentName: String?,
     val agentGlyph: String?,             // per-thread identity override
+    // Server's last_active (ms) as of the last sync — the syncer's change-detection
+    // key. Distinct from lastActiveAt, which the app also bumps from its local clock
+    // on send/finalize; comparing those to the server value spuriously rebuilds
+    // app-touched threads every tick. Entity-only; not surfaced to the domain.
+    val serverLastActive: Long = 0,
 )
 
 @Entity(
