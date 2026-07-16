@@ -47,4 +47,24 @@ class SseReaderTest {
         assertEquals(10, frames.size)
         assertEquals("not-even-json", frames[8])
     }
+
+    @Test
+    fun readSseFrames_pairsEventWithData() {
+        val src = okio.Buffer().writeUtf8(
+            "event: run.started\ndata: {\"run_id\":\"r1\"}\n\n" +
+            "event: assistant.delta\ndata: {\"delta\":\"hi\"}\n\n",
+        )
+        val frames = readSseFrames(src).toList()
+        assertEquals(listOf("run.started", "assistant.delta"), frames.map { it.event })
+        assertEquals("{\"run_id\":\"r1\"}", frames[0].data)
+    }
+
+    @Test
+    fun readSseFrames_dataOnlyFrame_hasNullEvent_andBlankLineResetsEvent() {
+        val src = okio.Buffer().writeUtf8(
+            "event: done\ndata: {}\n\n" + "data: {\"orphan\":true}\n\n" + ": comment\n",
+        )
+        val frames = readSseFrames(src).toList()
+        assertEquals(listOf("done", null), frames.map { it.event })
+    }
 }
