@@ -92,7 +92,7 @@ class ThreadRepository(
                 unread = false,
                 createdAt = now,
                 lastActiveAt = now,
-                sessionId = null,
+                source = "api_server",
                 agentName = profile?.name,
                 agentGlyph = profile?.glyph,
             ),
@@ -185,7 +185,7 @@ class ThreadRepository(
                         put("id", t.id); put("title", t.title); put("preview", t.preview)
                         put("state", t.state); put("pinned", t.pinned); put("unread", t.unread)
                         put("createdAt", t.createdAt); put("lastActiveAt", t.lastActiveAt)
-                        t.sessionId?.let { put("sessionId", it) }
+                        put("source", t.source)
                         t.agentName?.let { put("agentName", it) }
                         t.agentGlyph?.let { put("agentGlyph", it) }
                         put(
@@ -249,9 +249,9 @@ class ThreadRepository(
     }
 
     private suspend fun runTurn(threadId: String, userTurnId: String) {
-        val thread = threadDao.getThread(threadId) ?: return
+        threadDao.getThread(threadId) ?: return
         val input = buildInput(threadId)
-        when (val result = client.startRun(input, thread.sessionId)) {
+        when (val result = client.startRun(input, threadId)) {
             is ApiResult.Err -> {
                 if (result.error is ApiError.Auth) onAuthFailure((result.error as ApiError.Auth).code)
                 failTurn(threadId, userTurnId)
@@ -260,10 +260,6 @@ class ThreadRepository(
                 val runId = result.value.runId
                 turnDao.getTurn(userTurnId)?.let {
                     turnDao.upsertTurn(it.copy(sendState = "synced", runId = runId))
-                }
-                threadDao.getThread(threadId)?.let {
-                    // session_id defaults server-side to the run's own id (spec 02)
-                    if (it.sessionId == null) threadDao.upsertThread(it.copy(sessionId = runId))
                 }
                 streamLoop(threadId, runId, userTurnId, openStreamFirst = true)
             }

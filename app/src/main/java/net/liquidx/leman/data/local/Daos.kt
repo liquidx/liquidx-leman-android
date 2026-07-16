@@ -24,6 +24,9 @@ interface ThreadDao {
 
     @Query("SELECT COUNT(*) FROM threads")
     suspend fun threadCount(): Int
+
+    @Query("SELECT * FROM threads")
+    suspend fun getThreads(): List<ThreadEntity>
 }
 
 @Dao
@@ -48,6 +51,9 @@ interface TurnDao {
 
     @Query("DELETE FROM turns WHERE id = :id")
     suspend fun deleteTurn(id: String)
+
+    @Query("DELETE FROM turns WHERE threadId = :id")
+    suspend fun deleteTurnsFor(id: String)
 
     @Query("SELECT COUNT(*) FROM turns")
     suspend fun turnCount(): Int

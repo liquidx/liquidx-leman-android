@@ -29,7 +29,7 @@ fun ThreadEntity.toDomain(): Thread = Thread(
     unread = unread,
     createdAt = createdAt,
     lastActiveAt = lastActiveAt,
-    sessionId = sessionId,
+    source = source,
     agentName = agentName,
     agentGlyph = agentGlyph,
 )
@@ -47,7 +47,7 @@ fun Thread.toEntity(): ThreadEntity = ThreadEntity(
     unread = unread,
     createdAt = createdAt,
     lastActiveAt = lastActiveAt,
-    sessionId = sessionId,
+    source = source,
     agentName = agentName,
     agentGlyph = agentGlyph,
 )

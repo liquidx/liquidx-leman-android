@@ -14,8 +14,8 @@ data class AgentProfile(
 )
 
 /**
- * A thread is a local conversation — the gateway has no thread store, so the app
- * is the system of record (spec 02/03).
+ * A thread is a cache of a gateway session — the server is the system of
+ * record; `id` IS the server session id (spec 02/03).
  */
 data class Thread(
     val id: String,
@@ -26,7 +26,7 @@ data class Thread(
     val unread: Boolean,
     val createdAt: Long,
     val lastActiveAt: Long,
-    val sessionId: String?,
+    val source: String,
     val agentName: String?,
     val agentGlyph: String?,
 ) {

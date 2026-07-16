@@ -30,11 +30,11 @@ class ThreadsViewModelTest {
         pinned: Boolean = false,
         state: String = "idle",
         lastActiveAt: Long,
-        sessionId: String? = "sess",
+        source: String = "api_server",
     ) = ThreadEntity(
         id = id, title = title, preview = preview, state = state, pinned = pinned,
         unread = false, createdAt = lastActiveAt, lastActiveAt = lastActiveAt,
-        sessionId = sessionId, agentName = null, agentGlyph = null,
+        source = source, agentName = null, agentGlyph = null,
     )
 
     private fun kotlinx.coroutines.test.TestScope.vm(harness: VmHarness) = ThreadsViewModel(
@@ -105,16 +105,14 @@ class ThreadsViewModelTest {
     }
 
     @Test
-    fun stateLabels_idleWithoutSession_doneWithSession_failed() = runTest {
+    fun stateLabels_idleIsDone_failedIsFailed() = runTest {
         val h = VmHarness(this)
-        h.db.threadDao().upsertThread(entity("i", "idle one", sessionId = null, lastActiveAt = h.now))
-        h.db.threadDao().upsertThread(entity("d", "done one", sessionId = "s", lastActiveAt = h.now))
+        h.db.threadDao().upsertThread(entity("i", "idle one", lastActiveAt = h.now))
         h.db.threadDao().upsertThread(entity("f", "failed one", state = "failed", lastActiveAt = h.now))
         val vm = vm(h)
         vm.state.test {
             val items = awaitLoaded().sections.flatMap { it.items }.associateBy { it.id }
-            assertEquals("idle", items["i"]?.stateLabel)
-            assertEquals("done", items["d"]?.stateLabel)
+            assertEquals("done", items["i"]?.stateLabel)
             assertEquals("failed", items["f"]?.stateLabel)
             assertEquals(StateTone.Danger, items["f"]?.tone)
             cancelAndIgnoreRemainingEvents()

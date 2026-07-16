@@ -137,11 +137,12 @@ class ThreadsViewModel(
     }
 
     private fun Thread.toItem(now: Long): ThreadListItem {
+        // A Room-cached thread always reflects at least one server run (spec 03);
+        // there's no longer a "never ran" idle distinct from "done" idle.
         val (label, tone) = when {
             state == ThreadState.Running -> "running" to StateTone.Accent
             state == ThreadState.Failed -> "failed" to StateTone.Danger
-            sessionId != null -> "done" to StateTone.Faint
-            else -> "idle" to StateTone.Faint
+            else -> "done" to StateTone.Faint
         }
         return ThreadListItem(
             id = id,

@@ -5,10 +5,10 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-/** Room is primary storage, not a cache — the gateway has no thread store (spec 03). */
+/** Room is a cache of the gateway's session store; `id` IS the server session id (spec 03). */
 @Entity(tableName = "threads")
 data class ThreadEntity(
-    @PrimaryKey val id: String,          // client-generated UUID
+    @PrimaryKey val id: String,          // server session id
     val title: String,                   // derived from first user message
     val preview: String,                 // last turn snippet, maintained on write
     val state: String,                   // idle | running | failed (client-owned)
@@ -16,7 +16,7 @@ data class ThreadEntity(
     val unread: Boolean,                 // set when a run completes off-screen
     val createdAt: Long,
     val lastActiveAt: Long,              // orders the list; bumped on every turn
-    val sessionId: String?,              // last run's session_id, for correlation
+    val source: String,                  // api_server | cron | cli — server-owned (spec 03)
     val agentName: String?,
     val agentGlyph: String?,             // per-thread identity override
 )

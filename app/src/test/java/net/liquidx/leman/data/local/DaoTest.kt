@@ -31,7 +31,7 @@ class DaoTest {
     private fun thread(id: String, pinned: Boolean = false, lastActiveAt: Long = 0) = ThreadEntity(
         id = id, title = "t-$id", preview = "p", state = "idle", pinned = pinned,
         unread = false, createdAt = 0, lastActiveAt = lastActiveAt,
-        sessionId = null, agentName = null, agentGlyph = null,
+        source = "api_server", agentName = null, agentGlyph = null,
     )
 
     private fun turn(id: String, threadId: String, seq: Long) = TurnEntity(
@@ -92,5 +92,18 @@ class DaoTest {
         db.threadDao().clearAllThreads()
         assertEquals(0, db.threadDao().observeThreads().first().size)
         assertEquals(0, db.turnDao().observeTurns("a").first().size)
+    }
+
+    @Test
+    fun deleteTurnsFor_removesOnlyThatThreadsTurns() = runTest {
+        db.threadDao().upsertThread(thread("a"))
+        db.threadDao().upsertThread(thread("b"))
+        db.turnDao().upsertTurns(listOf(turn("t1", "a", 1)))
+        db.turnDao().upsertTurns(listOf(turn("t2", "b", 1)))
+
+        db.turnDao().deleteTurnsFor("a")
+
+        assertEquals(0, db.turnDao().getTurns("a").size)
+        assertEquals(1, db.turnDao().getTurns("b").size)
     }
 }

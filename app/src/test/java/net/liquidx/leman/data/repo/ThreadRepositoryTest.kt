@@ -20,7 +20,6 @@ import net.liquidx.leman.testutil.FakeHermesClient
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -383,16 +382,16 @@ class ThreadRepositoryTest {
     }
 
     @Test
-    fun sessionId_defaultsToFirstRunId_andIsSentOnFollowUps() = runTest {
+    fun startRun_alwaysSendsThreadIdAsSessionId() = runTest {
         client.eventScripts.add(completedScript("a"))
         val repo = repo()
         val threadId = repo.createThread("s")
         advanceUntilIdle()
-        assertNull(client.startRunCalls[0].second) // first run: no session yet
+        assertEquals(threadId, client.startRunCalls[0].second) // thread id IS the session id (spec 03)
 
         client.eventScripts.add(completedScript("b"))
         repo.sendMessage(threadId, "next")
         advanceUntilIdle()
-        assertEquals("run_1", client.startRunCalls[1].second) // session_id defaults to run's own id
+        assertEquals(threadId, client.startRunCalls[1].second)
     }
 }

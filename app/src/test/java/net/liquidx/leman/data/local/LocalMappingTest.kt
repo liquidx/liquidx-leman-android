@@ -34,9 +34,21 @@ class LocalMappingTest {
         val entity = ThreadEntity(
             id = "a", title = "t", preview = "p", state = "someday_new_state",
             pinned = false, unread = false, createdAt = 1, lastActiveAt = 2,
-            sessionId = null, agentName = null, agentGlyph = null,
+            source = "cron", agentName = null, agentGlyph = null,
         )
         assertEquals(ThreadState.Idle, entity.toDomain().state)
+    }
+
+    @Test
+    fun threadEntity_source_roundTripsThroughDomain() {
+        val entity = ThreadEntity(
+            id = "a", title = "t", preview = "p", state = "idle",
+            pinned = false, unread = false, createdAt = 1, lastActiveAt = 2,
+            source = "cron", agentName = null, agentGlyph = null,
+        )
+        val domain = entity.toDomain()
+        assertEquals("cron", domain.source)
+        assertEquals(entity, domain.toEntity())
     }
 
     @Test
