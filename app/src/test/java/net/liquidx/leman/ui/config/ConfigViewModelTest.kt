@@ -197,8 +197,8 @@ class ConfigViewModelTest {
     @Test
     fun clearAllThreads_requiresSecondTapWithinWindow() = runTest {
         val h = VmHarness(this)
-        h.client.eventScripts.add(
-            listOf(RunEvent.MessageDelta("x", 1.0), RunEvent.RunCompleted("x", null, 2.0)),
+        h.client.chatScripts.add(
+            listOf(RunEvent.RunStarted("r1", 0.5), RunEvent.RunCompleted("x", null, 2.0)),
         )
         h.repo.createThread("to be cleared")
         advanceUntilIdle()

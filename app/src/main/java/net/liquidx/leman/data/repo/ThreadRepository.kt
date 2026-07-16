@@ -24,8 +24,6 @@ import net.liquidx.leman.data.local.encodeTrace
 import net.liquidx.leman.data.local.toDomain
 import net.liquidx.leman.data.remote.HermesClient
 import net.liquidx.leman.data.remote.HermesStreamException
-import net.liquidx.leman.data.remote.RunStatus
-import net.liquidx.leman.data.remote.WireMessage
 import net.liquidx.leman.domain.composeTrace
 import net.liquidx.leman.domain.model.AgentProfile
 import net.liquidx.leman.domain.model.ApiError
@@ -68,6 +66,15 @@ class ThreadRepository(
     @Volatile
     private var visibleThreadId: String? = null
 
+    val syncer = SessionSyncer(
+        db = db,
+        client = client,
+        isRunActive = { activeRuns[it]?.isActive == true },
+        visibleThreadId = { visibleThreadId },
+    )
+
+    suspend fun syncNow(): ApiResult<Unit> = syncer.syncOnce()
+
     fun observeThreads(): Flow<List<Thread>> =
         threadDao.observeThreads().map { list -> list.map { it.toDomain() } }
 
@@ -79,12 +86,18 @@ class ThreadRepository(
         visibleThreadId = threadId
     }
 
-    suspend fun createThread(firstMessage: String, profile: AgentProfile? = null): String {
-        val id = newId()
+    suspend fun createThread(firstMessage: String, profile: AgentProfile? = null): String? {
+        val session = when (val result = client.createSession()) {
+            is ApiResult.Ok -> result.value
+            is ApiResult.Err -> {
+                if (result.error is ApiError.Auth) onAuthFailure((result.error as ApiError.Auth).code)
+                return null
+            }
+        }
         val now = clock()
         threadDao.upsertThread(
             ThreadEntity(
-                id = id,
+                id = session.id,
                 title = firstMessage.snippet(80),
                 preview = firstMessage.snippet(120),
                 state = "idle",
@@ -92,13 +105,13 @@ class ThreadRepository(
                 unread = false,
                 createdAt = now,
                 lastActiveAt = now,
-                source = "api_server",
+                source = session.source,
                 agentName = profile?.name,
                 agentGlyph = profile?.glyph,
             ),
         )
-        sendMessage(id, firstMessage)
-        return id
+        sendMessage(session.id, firstMessage)
+        return session.id
     }
 
     suspend fun sendMessage(threadId: String, text: String, viaButton: Boolean = false) {
@@ -123,18 +136,26 @@ class ThreadRepository(
         threadDao.upsertThread(
             thread.copy(state = "running", lastActiveAt = now, preview = text.snippet(120)),
         )
-        launchRun(threadId, turnId)
+        launchChat(threadId, turnId, text)
     }
 
-    /** Retry never happens automatically — only on this explicit call (spec 04). */
     suspend fun retryTurn(turnId: String) {
         val turn = turnDao.getTurn(turnId) ?: return
         if (turn.kind != "user") return
-        turnDao.upsertTurn(turn.copy(sendState = "sending", runId = null))
+        turnDao.upsertTurn(turn.copy(sendState = "sending"))
         threadDao.getThread(turn.threadId)?.let {
             threadDao.upsertThread(it.copy(state = "running", lastActiveAt = clock()))
         }
-        launchRun(turn.threadId, turnId)
+        // dedup: if the server already has this message, don't send it twice (spec §3)
+        val onServer = (client.sessionMessages(turn.threadId) as? ApiResult.Ok)
+            ?.value?.any { it.role == "user" && it.content == turn.markdown } == true
+        if (onServer) {
+            turnDao.getTurn(turnId)?.let { turnDao.upsertTurn(it.copy(sendState = "synced")) }
+            activeRuns[turn.threadId]?.cancel()
+            activeRuns[turn.threadId] = scope.launch { recoverByPolling(turn.threadId, turnId) }
+        } else {
+            launchChat(turn.threadId, turnId, turn.markdown.orEmpty())
+        }
     }
 
     suspend fun discardTurn(turnId: String) {
@@ -159,14 +180,31 @@ class ThreadRepository(
         threadDao.getThread(threadId)?.let { threadDao.upsertThread(it.copy(unread = false)) }
     }
 
-    suspend fun renameThread(threadId: String, title: String) {
-        threadDao.getThread(threadId)?.let { threadDao.upsertThread(it.copy(title = title)) }
-    }
+    /** Propagates to the server first; local state only changes on success (spec §4). */
+    suspend fun renameThread(threadId: String, title: String): Boolean =
+        when (val result = client.renameSession(threadId, title)) {
+            is ApiResult.Ok -> {
+                threadDao.getThread(threadId)?.let { threadDao.upsertThread(it.copy(title = title)) }
+                true
+            }
+            is ApiResult.Err -> {
+                if (result.error is ApiError.Auth) onAuthFailure((result.error as ApiError.Auth).code)
+                false
+            }
+        }
 
-    suspend fun deleteThread(threadId: String) {
-        activeRuns.remove(threadId)?.cancel()
-        clearStreaming(threadId)
-        threadDao.deleteThread(threadId)
+    suspend fun deleteThread(threadId: String): Boolean {
+        val result = client.deleteSession(threadId)
+        val gone = result is ApiResult.Ok ||
+            (result as? ApiResult.Err)?.error.let { it is ApiError.Client && it.code == 404 }
+        if (gone) {
+            activeRuns.remove(threadId)?.cancel()
+            clearStreaming(threadId)
+            threadDao.deleteThread(threadId)
+        } else if ((result as ApiResult.Err).error is ApiError.Auth) {
+            onAuthFailure((result.error as ApiError.Auth).code)
+        }
+        return gone
     }
 
     suspend fun clearAll() {
@@ -218,10 +256,7 @@ class ThreadRepository(
 
     private suspend fun allThreads(): List<ThreadEntity> = threadDao.observeThreads().first()
 
-    /**
-     * On thread open / process restart: a thread stuck `running` with a synced
-     * user turn carrying a runId is recovered via poll + stream replay (spec 02).
-     */
+    /** On thread open / process restart: a thread stuck `running` recovers via message polling. */
     suspend fun recoverIfRunning(threadId: String) {
         if (activeRuns[threadId]?.isActive == true) return
         val thread = threadDao.getThread(threadId) ?: return
@@ -231,126 +266,117 @@ class ThreadRepository(
             threadDao.upsertThread(thread.copy(state = "idle"))
             return
         }
-        val runId = userTurn.runId
-        if (runId == null) {
-            failTurn(threadId, userTurn.id)
-            return
-        }
-        activeRuns[threadId] = scope.launch {
-            streamLoop(threadId, runId, userTurn.id, openStreamFirst = false)
-        }
+        activeRuns[threadId] = scope.launch { recoverByPolling(threadId, userTurn.id) }
     }
 
-    // ---- run lifecycle -----------------------------------------------------
+    // ---- chat lifecycle ------------------------------------------------------
 
-    private suspend fun launchRun(threadId: String, userTurnId: String) {
+    private suspend fun launchChat(threadId: String, userTurnId: String, text: String) {
         activeRuns[threadId]?.cancel()
-        activeRuns[threadId] = scope.launch { runTurn(threadId, userTurnId) }
+        activeRuns[threadId] = scope.launch { chatTurn(threadId, userTurnId, text) }
     }
 
-    private suspend fun runTurn(threadId: String, userTurnId: String) {
-        threadDao.getThread(threadId) ?: return
-        val input = buildInput(threadId)
-        when (val result = client.startRun(input, threadId)) {
-            is ApiResult.Err -> {
-                if (result.error is ApiError.Auth) onAuthFailure((result.error as ApiError.Auth).code)
-                failTurn(threadId, userTurnId)
-            }
-            is ApiResult.Ok -> {
-                val runId = result.value.runId
-                turnDao.getTurn(userTurnId)?.let {
-                    turnDao.upsertTurn(it.copy(sendState = "synced", runId = runId))
+    private suspend fun chatTurn(threadId: String, userTurnId: String, text: String) {
+        val events = mutableListOf<RunEvent>()
+        var runId = ""
+        var completed: RunEvent.RunCompleted? = null
+        var streamError: ApiError? = null
+        setStreaming(StreamingRun(threadId, runId, "", null, interrupted = false))
+        try {
+            client.chatStream(threadId, text).collect { event ->
+                when (event) {
+                    is RunEvent.RunStarted -> {
+                        runId = event.runId
+                        turnDao.getTurn(userTurnId)?.let {
+                            turnDao.upsertTurn(it.copy(sendState = "synced", runId = event.runId))
+                        }
+                    }
+                    is RunEvent.RunCompleted -> completed = event
+                    else -> Unit
                 }
-                streamLoop(threadId, runId, userTurnId, openStreamFirst = true)
+                events += event
+                setStreaming(streamingFrom(threadId, runId, events))
             }
+        } catch (e: HermesStreamException) {
+            streamError = e.apiError
+        }
+        try {
+            completed?.let {
+                finalize(threadId, runId, it.output, events)
+                syncNow() // reconcile ids + siblings right after our own run (spec §2)
+                return
+            }
+            if (streamError is ApiError.Auth) {
+                onAuthFailure((streamError as ApiError.Auth).code)
+                failTurn(threadId, userTurnId)
+                return
+            }
+            val started = turnDao.getTurn(userTurnId)?.sendState == "synced"
+            if (started) recoverByPolling(threadId, userTurnId) else failTurn(threadId, userTurnId)
+        } finally {
+            clearStreaming(threadId)
         }
     }
 
     /**
-     * Fold the event stream; on drop, poll `GET /v1/runs/{id}` as backstop and —
-     * if still running — re-open the stream, RESETTING accumulation first
-     * because the replay starts from the beginning (spec 02).
+     * A POST stream can't be re-attached, so a dropped chat recovers by polling
+     * the session's message history until the assistant reply lands (spec §3).
      */
-    private suspend fun streamLoop(
-        threadId: String,
-        runId: String,
-        userTurnId: String,
-        openStreamFirst: Boolean,
-    ) {
+    private suspend fun recoverByPolling(threadId: String, userTurnId: String) {
+        markInterrupted(threadId)
         val backoff = backoffFactory()
-        var openStream = openStreamFirst
-        try {
-            while (true) {
-                if (openStream) {
-                    val events = mutableListOf<RunEvent>()
-                    setStreaming(StreamingRun(threadId, runId, "", null, interrupted = false))
-                    var completed: RunEvent.RunCompleted? = null
-                    var streamError: ApiError? = null
-                    try {
-                        client.runEvents(runId).collect { event ->
-                            events += event
-                            if (event is RunEvent.RunCompleted) completed = event
-                            setStreaming(streamingFrom(threadId, runId, events))
-                        }
-                    } catch (e: HermesStreamException) {
-                        streamError = e.apiError
-                    }
-                    completed?.let {
-                        finalize(threadId, runId, it.output, events)
-                        return
-                    }
-                    if (streamError is ApiError.Auth) {
-                        onAuthFailure((streamError as ApiError.Auth).code)
+        var polls = 0
+        while (polls < MAX_RECOVERY_POLLS) {
+            polls++
+            when (val result = client.sessionMessages(threadId)) {
+                is ApiResult.Err -> {
+                    val error = result.error
+                    if (error is ApiError.Auth) {
+                        onAuthFailure(error.code)
                         failTurn(threadId, userTurnId)
                         return
                     }
-                    // dropped or ended without completion → poll backstop
-                    markInterrupted(threadId)
-                }
-                openStream = true
-
-                var pollFailures = 0
-                var outcome: RunStatus? = null
-                var polledOutput: String? = null
-                while (outcome == null) {
-                    when (val poll = client.getRun(runId)) {
-                        is ApiResult.Ok -> {
-                            outcome = poll.value.runStatus
-                            polledOutput = poll.value.output
-                        }
-                        is ApiResult.Err -> {
-                            val error = poll.error
-                            if (error is ApiError.Auth) {
-                                onAuthFailure(error.code)
-                                failTurn(threadId, userTurnId)
-                                return
-                            }
-                            if (++pollFailures >= MAX_POLL_FAILURES) {
-                                failTurn(threadId, userTurnId)
-                                return
-                            }
-                            delay(backoff.nextDelayMillis())
-                        }
-                    }
-                }
-                when (outcome) {
-                    RunStatus.Completed -> {
-                        finalize(threadId, runId, polledOutput.orEmpty(), emptyList())
+                    if (error is ApiError.Client && error.code == 404) {
+                        // session deleted remotely — the thread is gone
+                        threadDao.deleteThread(threadId)
+                        clearStreaming(threadId)
                         return
                     }
-                    RunStatus.Failed -> {
-                        failTurn(threadId, userTurnId)
-                        return
+                }
+                is ApiResult.Ok -> {
+                    val messages = result.value
+                    val userTurn = turnDao.getTurn(userTurnId)
+                    val userIndex = messages.indexOfLast {
+                        it.role == "user" && it.content == userTurn?.markdown
                     }
-                    else -> {
-                        // still running: back off, then re-open the stream (replays)
-                        delay(backoff.nextDelayMillis())
+                    val replied = userIndex >= 0 && messages.drop(userIndex + 1).any {
+                        it.role == "assistant" && !it.content.isNullOrEmpty()
+                    }
+                    if (replied) {
+                        turnDao.deleteTurnsFor(threadId)
+                        turnDao.upsertTurns(sessionTurns(threadId, messages))
+                        val now = clock()
+                        threadDao.getThread(threadId)?.let {
+                            threadDao.upsertThread(
+                                it.copy(
+                                    state = "idle",
+                                    preview = (
+                                        messages.lastOrNull { m -> !m.content.isNullOrEmpty() }
+                                            ?.content ?: ""
+                                        ).snippet(120),
+                                    lastActiveAt = now,
+                                    unread = visibleThreadId != threadId,
+                                ),
+                            )
+                        }
+                        clearStreaming(threadId)
+                        return
                     }
                 }
             }
-        } finally {
-            clearStreaming(threadId)
+            delay(backoff.nextDelayMillis())
         }
+        failTurn(threadId, userTurnId)
     }
 
     private suspend fun finalize(
@@ -397,17 +423,6 @@ class ThreadRepository(
         clearStreaming(threadId)
     }
 
-    /** Turns → `input` messages: traces excluded, failed sends excluded (spec 03). */
-    private suspend fun buildInput(threadId: String): List<WireMessage> =
-        turnDao.getTurns(threadId).mapNotNull { turn ->
-            val content = turn.markdown ?: return@mapNotNull null
-            when {
-                turn.kind == "user" && turn.sendState != "failed" -> WireMessage("user", content)
-                turn.kind == "agent" -> WireMessage("assistant", content)
-                else -> null
-            }
-        }
-
     private fun streamingFrom(threadId: String, runId: String, events: List<RunEvent>): StreamingRun =
         StreamingRun(
             threadId = threadId,
@@ -434,6 +449,6 @@ class ThreadRepository(
     }
 
     private companion object {
-        const val MAX_POLL_FAILURES = 5
+        const val MAX_RECOVERY_POLLS = 20
     }
 }

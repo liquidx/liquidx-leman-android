@@ -9,7 +9,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import net.liquidx.leman.data.local.LemanDatabase
+import net.liquidx.leman.data.local.ThreadEntity
+import net.liquidx.leman.data.local.TurnEntity
 import net.liquidx.leman.data.remote.HermesStreamException
+import net.liquidx.leman.data.remote.SessionDto
+import net.liquidx.leman.data.remote.SessionMessageDto
 import net.liquidx.leman.domain.model.ApiError
 import net.liquidx.leman.domain.model.ApiResult
 import net.liquidx.leman.domain.model.RunEvent
@@ -19,7 +23,9 @@ import net.liquidx.leman.domain.model.TurnKind
 import net.liquidx.leman.testutil.FakeHermesClient
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -69,65 +75,117 @@ class ThreadRepositoryTest {
         )
     }
 
-    private fun completedScript(output: String) = listOf<Any>(
-        RunEvent.MessageDelta(output.take(2), 1.0),
-        RunEvent.MessageDelta(output.drop(2), 1.1),
-        RunEvent.RunCompleted(output, null, 2.0),
-    )
+    private suspend fun seedThread(id: String, state: String, preview: String = "p") {
+        db.threadDao().upsertThread(
+            ThreadEntity(
+                id = id, title = "t", preview = preview, state = state, pinned = false,
+                unread = false, createdAt = now, lastActiveAt = now, source = "api_server",
+                agentName = null, agentGlyph = null,
+            ),
+        )
+    }
 
-    @Test
-    fun createThread_derivesTitle_insertsThread_andStartsRun() = runTest {
-        client.eventScripts.add(completedScript("hello there"))
-        val repo = repo()
-        val threadId = repo.createThread("fix the flaky ci pipeline please")
-        advanceUntilIdle()
-        val thread = repo.observeThreads().first().single()
-        assertEquals(threadId, thread.id)
-        assertEquals("fix the flaky ci pipeline please", thread.title)
-        assertEquals(ThreadState.Idle, thread.state)
-        assertEquals(1, client.startRunCalls.size)
+    private suspend fun seedUserTurn(
+        turnId: String,
+        threadId: String,
+        markdown: String,
+        sendState: String,
+        runId: String? = null,
+        seq: Long = 1,
+    ) {
+        db.turnDao().upsertTurn(
+            TurnEntity(
+                id = turnId, threadId = threadId, seq = seq, kind = "user", createdAt = now,
+                markdown = markdown, blocksJson = null, traceJson = null, runId = runId,
+                sendState = sendState, viaButton = false,
+            ),
+        )
     }
 
     @Test
-    fun sendMessage_run202_userTurnSyncedWithRunId() = runTest {
-        client.eventScripts.add(completedScript("ok"))
-        val repo = repo()
-        val threadId = repo.createThread("first message")
-        advanceUntilIdle()
-        val userTurn = repo.observeTurns(threadId).first().first { it.kind == TurnKind.User }
-        assertEquals(SendState.Synced, userTurn.sendState)
-        assertEquals("run_1", userTurn.runId)
-    }
-
-    @Test
-    fun sendMessage_buildsInputFromHistory_excludingTraces_newMessageLast() = runTest {
-        client.eventScripts.add(
-            listOf<Any>(
-                RunEvent.Reasoning("thinking", 0.5),
-                RunEvent.ToolStarted("ci.logs", "q", 1.0),
-                RunEvent.ToolCompleted("ci.logs", 2.0, false, 3.0),
-                RunEvent.RunCompleted("first answer", null, 4.0),
+    fun createThread_usesServerSessionId_andStreamsChat() = runTest {
+        client.createSessionResult = ApiResult.Ok(SessionDto(id = "api_9_z"))
+        client.chatScripts.add(
+            listOf(
+                RunEvent.RunStarted("r1", 1.0),
+                RunEvent.MessageDelta("hello there", 2.0),
+                RunEvent.RunCompleted("hello there", null, 3.0),
             ),
         )
         val repo = repo()
-        val threadId = repo.createThread("first message")
+        val id = repo.createThread("fix the flaky ci pipeline please")
         advanceUntilIdle()
-        // history now: user + trace + agent
-        client.eventScripts.add(completedScript("second answer"))
-        repo.sendMessage(threadId, "follow up")
+        assertEquals("api_9_z", id)
+        assertEquals("api_9_z" to "fix the flaky ci pipeline please", client.chatCalls.single())
+        val turns = repo.observeTurns("api_9_z").first()
+        assertEquals(SendState.Synced, turns.first { it.kind == TurnKind.User }.sendState)
+        assertEquals("r1", turns.first { it.kind == TurnKind.User }.runId)
+        assertEquals("hello there", turns.first { it.kind == TurnKind.Agent }.markdown)
+    }
+
+    @Test
+    fun createThread_derivesTitleAndPreview() = runTest {
+        client.createSessionResult = ApiResult.Ok(SessionDto(id = "s1"))
+        client.chatScripts.add(
+            listOf(RunEvent.RunStarted("r1", 1.0), RunEvent.RunCompleted("hello there", null, 2.0)),
+        )
+        val repo = repo()
+        val id = repo.createThread("fix the flaky ci pipeline please")
+        advanceUntilIdle()
+        val thread = repo.observeThreads().first().single()
+        assertEquals(id, thread.id)
+        assertEquals("fix the flaky ci pipeline please", thread.title)
+        assertEquals(ThreadState.Idle, thread.state)
+    }
+
+    @Test
+    fun createThread_sessionCreateFails_returnsNull_noThreadRow() = runTest {
+        client.createSessionResult = ApiResult.Err(ApiError.Network(IOException("down")))
+        val repo = repo()
+        assertNull(repo.createThread("hi"))
+        assertTrue(repo.observeThreads().first().isEmpty())
+    }
+
+    @Test
+    fun createThread_authFailureOnSessionCreate_notifiesCallback() = runTest {
+        client.createSessionResult = ApiResult.Err(ApiError.Auth(401))
+        val repo = repo()
+        assertNull(repo.createThread("hi"))
+        assertEquals(1, authFailures)
+    }
+
+    @Test
+    fun sendMessage_secondTurn_syncsWithNewRunId() = runTest {
+        client.createSessionResult = ApiResult.Ok(SessionDto(id = "s1"))
+        // Both scripts queued up front: FakeHermesClient only pops the head once a second
+        // script is queued behind it, so interleaving an add between opens would replay
+        // the first script twice instead of advancing to the second.
+        client.chatScripts.add(
+            listOf(RunEvent.RunStarted("r1", 1.0), RunEvent.RunCompleted("first answer", null, 2.0)),
+        )
+        client.chatScripts.add(
+            listOf(RunEvent.RunStarted("r2", 1.0), RunEvent.RunCompleted("second answer", null, 2.0)),
+        )
+        val repo = repo()
+        repo.createThread("first message")
         advanceUntilIdle()
 
-        val input = client.startRunCalls[1].first
-        assertEquals(listOf("user", "assistant", "user"), input.map { it.role })
-        assertEquals("first message", input[0].content)
-        assertEquals("first answer", input[1].content)
-        assertEquals("follow up", input[2].content)
+        repo.sendMessage("s1", "follow up")
+        advanceUntilIdle()
+
+        val userTurns = repo.observeTurns("s1").first().filter { it.kind == TurnKind.User }
+        assertEquals(2, userTurns.size)
+        assertEquals("r2", userTurns.last().runId)
+        assertEquals(SendState.Synced, userTurns.last().sendState)
+        assertEquals("s1" to "follow up", client.chatCalls[1])
     }
 
     @Test
     fun runCompleted_persistsTraceThenAgentTurn_updatesThread() = runTest {
-        client.eventScripts.add(
-            listOf<Any>(
+        client.createSessionResult = ApiResult.Ok(SessionDto(id = "s1"))
+        client.chatScripts.add(
+            listOf(
+                RunEvent.RunStarted("r1", 1.0),
                 RunEvent.Reasoning("diagnosing", 0.5),
                 RunEvent.ToolStarted("ci.logs", "fetch runs", 1.0),
                 RunEvent.ToolCompleted("ci.logs", 5.9, false, 2.0),
@@ -136,16 +194,16 @@ class ThreadRepositoryTest {
             ),
         )
         val repo = repo()
-        val threadId = repo.createThread("fix ci")
+        repo.createThread("fix ci")
         advanceUntilIdle()
 
-        val turns = repo.observeTurns(threadId).first()
+        val turns = repo.observeTurns("s1").first()
         assertEquals(listOf(TurnKind.User, TurnKind.Trace, TurnKind.Agent), turns.map { it.kind })
         val trace = turns[1].trace
         assertNotNull(trace)
         assertEquals(2, trace!!.steps.size)
         assertEquals("the fix is in", turns[2].markdown)
-        assertEquals("run_1", turns[2].runId)
+        assertEquals("r1", turns[2].runId)
 
         val thread = repo.observeThreads().first().single()
         assertEquals(ThreadState.Idle, thread.state)
@@ -154,151 +212,276 @@ class ThreadRepositoryTest {
 
     @Test
     fun runCompleted_offScreen_setsUnread_visibleDoesNot() = runTest {
-        client.eventScripts.add(completedScript("answer"))
+        client.createSessionResult = ApiResult.Ok(SessionDto(id = "s1"))
+        client.chatScripts.add(
+            listOf(RunEvent.RunStarted("r1", 1.0), RunEvent.RunCompleted("answer", null, 2.0)),
+        )
+        client.chatScripts.add(
+            listOf(RunEvent.RunStarted("r2", 1.0), RunEvent.RunCompleted("answer2", null, 2.0)),
+        )
         val repo = repo()
-        val threadId = repo.createThread("q")
+        repo.createThread("q")
         advanceUntilIdle()
         assertTrue(repo.observeThreads().first().single().unread)
 
-        client.eventScripts.add(completedScript("answer2"))
-        repo.setVisibleThread(threadId)
-        repo.sendMessage(threadId, "again")
+        repo.setVisibleThread("s1")
+        repo.sendMessage("s1", "again")
         advanceUntilIdle()
         assertEquals(false, repo.observeThreads().first().single().unread)
     }
 
     @Test
-    fun postFailure_userTurnFailed_threadFailed_noAutoRetry() = runTest {
-        client.startRunResult = ApiResult.Err(ApiError.Network(IOException("down")))
-        val repo = repo()
-        val threadId = repo.createThread("will fail")
-        advanceUntilIdle()
-
-        val turn = repo.observeTurns(threadId).first().single()
-        assertEquals(SendState.Failed, turn.sendState)
-        assertEquals(ThreadState.Failed, repo.observeThreads().first().single().state)
-        assertEquals(1, client.startRunCalls.size) // user actions never auto-retry
-    }
-
-    @Test
-    fun streamDies_deltasNeverTouchedDb_pollShowsFailed_turnFails() = runTest {
-        client.eventScripts.add(
-            listOf<Any>(
-                RunEvent.MessageDelta("partial ", 1.0),
+    fun droppedStream_afterRunStarted_recoversByPollingMessages() = runTest {
+        client.createSessionResult = ApiResult.Ok(SessionDto(id = "s1"))
+        client.chatScripts.add(
+            listOf(
+                RunEvent.RunStarted("r1", 1.0),
+                RunEvent.MessageDelta("par", 2.0),
                 HermesStreamException(ApiError.Network(IOException("drop"))),
             ),
         )
-        client.getRunResults.add(ApiResult.Ok(client.runDto("failed")))
+        client.messagesBySession["s1"] = ApiResult.Ok(
+            listOf(
+                SessionMessageDto(1, "user", "hi", timestamp = 1.0),
+                SessionMessageDto(2, "assistant", "partial answer done", timestamp = 5.0, finishReason = "stop"),
+            ),
+        )
         val repo = repo()
-        val threadId = repo.createThread("q")
+        repo.createThread("hi")
         advanceUntilIdle()
+        val thread = repo.observeThreads().first().single()
+        assertEquals(ThreadState.Idle, thread.state)
+        assertEquals(
+            "partial answer done",
+            repo.observeTurns("s1").first().last { it.kind == TurnKind.Agent }.markdown,
+        )
+    }
 
-        val turns = repo.observeTurns(threadId).first()
+    @Test
+    fun droppedStream_beforeRunStarted_failsTurn() = runTest {
+        client.createSessionResult = ApiResult.Ok(SessionDto(id = "s1"))
+        client.chatScripts.add(listOf(HermesStreamException(ApiError.Network(IOException("refused")))))
+        client.messagesBySession["s1"] = ApiResult.Ok(emptyList())
+        val repo = repo()
+        repo.createThread("hi")
+        advanceUntilIdle()
+        assertEquals(ThreadState.Failed, repo.observeThreads().first().single().state)
+        val turns = repo.observeTurns("s1").first()
         assertEquals(1, turns.size) // no agent/trace rows: deltas never hit the DB
-        assertEquals(SendState.Failed, turns.single().sendState)
-        assertEquals(ThreadState.Failed, repo.observeThreads().first().single().state)
+        assertEquals(SendState.Failed, turns.single { it.kind == TurnKind.User }.sendState)
     }
 
     @Test
-    fun streamDies_pollShowsCompleted_outputPersistedFromPoll() = runTest {
-        client.eventScripts.add(
-            listOf<Any>(
-                RunEvent.MessageDelta("part", 1.0),
+    fun recoverByPolling_exhaustsPolls_failsTurn() = runTest {
+        client.createSessionResult = ApiResult.Ok(SessionDto(id = "s1"))
+        client.chatScripts.add(
+            listOf(
+                RunEvent.RunStarted("r1", 1.0),
                 HermesStreamException(ApiError.Network(IOException("drop"))),
             ),
         )
-        client.getRunResults.add(ApiResult.Ok(client.runDto("completed", output = "full answer")))
+        client.messagesBySession["s1"] = ApiResult.Ok(
+            listOf(SessionMessageDto(1, "user", "hi", timestamp = 1.0)), // no assistant reply ever arrives
+        )
         val repo = repo()
-        val threadId = repo.createThread("q")
+        repo.createThread("hi")
         advanceUntilIdle()
 
-        val agent = repo.observeTurns(threadId).first().single { it.kind == TurnKind.Agent }
-        assertEquals("full answer", agent.markdown)
+        assertEquals(ThreadState.Failed, repo.observeThreads().first().single().state)
+        assertEquals(
+            SendState.Failed,
+            repo.observeTurns("s1").first().single { it.kind == TurnKind.User }.sendState,
+        )
+    }
+
+    @Test
+    fun recoverByPolling_sessionDeletedRemotely_removesLocalThread() = runTest {
+        client.createSessionResult = ApiResult.Ok(SessionDto(id = "s1"))
+        client.chatScripts.add(
+            listOf(
+                RunEvent.RunStarted("r1", 1.0),
+                HermesStreamException(ApiError.Network(IOException("drop"))),
+            ),
+        )
+        // messagesBySession left unset -> sessionMessages() returns 404 (session gone)
+        val repo = repo()
+        repo.createThread("hi")
+        advanceUntilIdle()
+
+        assertTrue(repo.observeThreads().first().isEmpty())
+    }
+
+    @Test
+    fun recoverByPolling_authFailure_notifiesAndFailsTurn() = runTest {
+        client.createSessionResult = ApiResult.Ok(SessionDto(id = "s1"))
+        client.chatScripts.add(
+            listOf(
+                RunEvent.RunStarted("r1", 1.0),
+                HermesStreamException(ApiError.Network(IOException("drop"))),
+            ),
+        )
+        client.messagesBySession["s1"] = ApiResult.Err(ApiError.Auth(401))
+        val repo = repo()
+        repo.createThread("hi")
+        advanceUntilIdle()
+
+        assertEquals(1, authFailures)
+        assertEquals(
+            SendState.Failed,
+            repo.observeTurns("s1").first().single { it.kind == TurnKind.User }.sendState,
+        )
+    }
+
+    @Test
+    fun retryTurn_messageAlreadyOnServer_pollsInsteadOfResending() = runTest {
+        val repo = repo()
+        seedThread("s1", state = "failed")
+        seedUserTurn("t1", "s1", "already sent", sendState = "failed")
+        client.messagesBySession["s1"] = ApiResult.Ok(
+            listOf(
+                SessionMessageDto(1, "user", "already sent", timestamp = 1.0),
+                SessionMessageDto(2, "assistant", "already answered", timestamp = 2.0, finishReason = "stop"),
+            ),
+        )
+
+        repo.retryTurn("t1")
+        advanceUntilIdle()
+
+        assertEquals(0, client.chatCalls.size) // no duplicate send
         assertEquals(ThreadState.Idle, repo.observeThreads().first().single().state)
     }
 
     @Test
-    fun streamDies_stillRunning_reopensAndResetsAccumulation_noDoubleText() = runTest {
-        client.eventScripts.add(
-            listOf<Any>(
-                RunEvent.MessageDelta("AB", 1.0),
-                HermesStreamException(ApiError.Network(IOException("drop"))),
-            ),
-        )
-        // replay from the beginning on re-open (verified gateway behavior)
-        client.eventScripts.add(
-            listOf<Any>(
-                RunEvent.MessageDelta("AB", 1.0),
-                RunEvent.MessageDelta("C", 1.5),
-                RunEvent.RunCompleted("ABC", null, 2.0),
-            ),
-        )
-        client.getRunResults.add(ApiResult.Ok(client.runDto("running")))
+    fun retryTurn_notOnServer_resends() = runTest {
         val repo = repo()
-        val threadId = repo.createThread("q")
+        seedThread("s1", state = "failed")
+        seedUserTurn("t1", "s1", "not yet sent", sendState = "failed")
+        client.messagesBySession["s1"] = ApiResult.Ok(emptyList())
+        client.chatScripts.add(
+            listOf(RunEvent.RunStarted("r2", 1.0), RunEvent.RunCompleted("resent ok", null, 2.0)),
+        )
+
+        repo.retryTurn("t1")
         advanceUntilIdle()
 
-        assertEquals(2, client.streamOpens)
-        val agent = repo.observeTurns(threadId).first().single { it.kind == TurnKind.Agent }
-        assertEquals("ABC", agent.markdown)
-    }
-
-    @Test
-    fun retryTurn_reSendsSameMessage_asNewRun() = runTest {
-        client.startRunResult = ApiResult.Err(ApiError.Network(IOException("down")))
-        val repo = repo()
-        val threadId = repo.createThread("retry me")
-        advanceUntilIdle()
-
-        client.startRunResult = ApiResult.Ok(net.liquidx.leman.data.remote.RunAcceptedDto("run_2", "started"))
-        client.eventScripts.add(completedScript("recovered"))
-        val failedTurn = repo.observeTurns(threadId).first().single()
-        repo.retryTurn(failedTurn.id)
-        advanceUntilIdle()
-
-        assertEquals(2, client.startRunCalls.size)
-        assertEquals("retry me", client.startRunCalls[1].first.last().content)
-        val turns = repo.observeTurns(threadId).first()
-        assertEquals(SendState.Synced, turns.first { it.kind == TurnKind.User }.sendState)
-        assertEquals("recovered", turns.single { it.kind == TurnKind.Agent }.markdown)
+        assertEquals(1, client.chatCalls.size)
+        assertEquals(
+            SendState.Synced,
+            repo.observeTurns("s1").first().first { it.kind == TurnKind.User }.sendState,
+        )
     }
 
     @Test
     fun discardTurn_removesFailedTurn_threadBackToIdle() = runTest {
-        client.startRunResult = ApiResult.Err(ApiError.Network(IOException("down")))
+        client.createSessionResult = ApiResult.Ok(SessionDto(id = "s1"))
+        client.chatScripts.add(listOf(HermesStreamException(ApiError.Network(IOException("down")))))
+        client.messagesBySession["s1"] = ApiResult.Ok(emptyList())
         val repo = repo()
-        val threadId = repo.createThread("discard me")
+        repo.createThread("discard me")
         advanceUntilIdle()
 
-        val failedTurn = repo.observeTurns(threadId).first().single()
+        val failedTurn = repo.observeTurns("s1").first().single()
         repo.discardTurn(failedTurn.id)
         advanceUntilIdle()
-        assertEquals(0, repo.observeTurns(threadId).first().size)
+        assertEquals(0, repo.observeTurns("s1").first().size)
         assertEquals(ThreadState.Idle, repo.observeThreads().first().single().state)
     }
 
     @Test
-    fun authFailureOnStart_notifiesCallback() = runTest {
-        client.startRunResult = ApiResult.Err(ApiError.Auth(401))
+    fun renameThread_patchesServer_localOnlyOnOk() = runTest {
+        client.createSessionResult = ApiResult.Ok(SessionDto(id = "s1"))
+        client.chatScripts.add(
+            listOf(RunEvent.RunStarted("r1", 1.0), RunEvent.RunCompleted("ok", null, 2.0)),
+        )
+        val repo = repo()
+        repo.createThread("original title")
+        advanceUntilIdle()
+
+        val renamed = repo.renameThread("s1", "new title")
+        assertTrue(renamed)
+        assertEquals("s1" to "new title", client.renameCalls.single())
+        assertEquals("new title", repo.observeThreads().first().single().title)
+
+        client.renameSessionResult = ApiResult.Err(ApiError.Network(IOException("down")))
+        val failed = repo.renameThread("s1", "rejected title")
+        assertFalse(failed)
+        assertEquals("new title", repo.observeThreads().first().single().title) // untouched
+    }
+
+    @Test
+    fun renameThread_authFailure_notifiesCallback() = runTest {
+        client.createSessionResult = ApiResult.Ok(SessionDto(id = "s1"))
+        client.chatScripts.add(
+            listOf(RunEvent.RunStarted("r1", 1.0), RunEvent.RunCompleted("ok", null, 2.0)),
+        )
+        val repo = repo()
+        repo.createThread("original title")
+        advanceUntilIdle()
+
+        client.renameSessionResult = ApiResult.Err(ApiError.Auth(401))
+        assertFalse(repo.renameThread("s1", "new title"))
+        assertEquals(1, authFailures)
+    }
+
+    @Test
+    fun deleteThread_deletesServerThenLocal_404TreatedAsGone() = runTest {
+        val repo = repo()
+        seedThread("s1", state = "idle")
+        seedThread("s2", state = "idle")
+        seedThread("s3", state = "idle")
+
+        client.deleteSessionResult = ApiResult.Ok(Unit)
+        assertTrue(repo.deleteThread("s1"))
+        assertNull(repo.observeThreads().first().find { it.id == "s1" })
+
+        client.deleteSessionResult = ApiResult.Err(ApiError.Client(404, "not found"))
+        assertTrue(repo.deleteThread("s2"))
+        assertNull(repo.observeThreads().first().find { it.id == "s2" })
+
+        client.deleteSessionResult = ApiResult.Err(ApiError.Network(IOException("down")))
+        assertFalse(repo.deleteThread("s3"))
+        assertNotNull(repo.observeThreads().first().find { it.id == "s3" })
+    }
+
+    @Test
+    fun authFailure_onChatStream_poisonsConnState_andFailsTurn() = runTest {
+        client.createSessionResult = ApiResult.Ok(SessionDto(id = "s1"))
+        client.chatScripts.add(listOf(HermesStreamException(ApiError.Auth(401))))
         val repo = repo()
         repo.createThread("q")
         advanceUntilIdle()
         assertEquals(1, authFailures)
+        assertEquals(
+            SendState.Failed,
+            repo.observeTurns("s1").first().single { it.kind == TurnKind.User }.sendState,
+        )
+    }
+
+    @Test
+    fun runCompletion_triggersSyncNow() = runTest {
+        client.createSessionResult = ApiResult.Ok(SessionDto(id = "s1"))
+        client.chatScripts.add(
+            listOf(RunEvent.RunStarted("r1", 1.0), RunEvent.RunCompleted("done", null, 2.0)),
+        )
+        val repo = repo()
+        repo.createThread("q")
+        advanceUntilIdle()
+        assertTrue(client.listSessionsCalls >= 1)
     }
 
     @Test
     fun streaming_stateExposesAccumulatingTextAndLiveTrace() = runTest {
         // Stream that never completes: text stays visible in streaming state.
-        client.eventScripts.add(
-            listOf<Any>(
+        client.createSessionResult = ApiResult.Ok(SessionDto(id = "s1"))
+        client.chatScripts.add(
+            listOf(
+                RunEvent.RunStarted("r1", 0.5),
                 RunEvent.MessageDelta("live ", 1.0),
                 RunEvent.ToolStarted("web_search", "q", 1.5),
                 RunEvent.MessageDelta("text", 2.0),
             ),
         )
-        client.getRunResults.add(ApiResult.Ok(client.runDto("failed"))) // terminal for the test
         val repo = repo()
-        val threadId = repo.createThread("q")
 
         var sawStreaming = false
         val collectScope = kotlinx.coroutines.CoroutineScope(
@@ -306,34 +489,41 @@ class ThreadRepositoryTest {
         )
         val job = collectScope.launch {
             repo.streaming.collect { map ->
-                map[threadId]?.let {
+                map["s1"]?.let {
                     if (it.text == "live text" && it.trace?.steps?.size == 1) sawStreaming = true
                 }
             }
         }
+        repo.createThread("q")
         advanceUntilIdle()
         job.cancel()
         assertTrue(sawStreaming)
     }
 
     @Test
-    fun pinsReadsDeletes_areLocalOnly() = runTest {
-        client.eventScripts.add(completedScript("a"))
+    fun pinAndMarkRead_areLocalOnly() = runTest {
+        client.createSessionResult = ApiResult.Ok(SessionDto(id = "s1"))
+        client.chatScripts.add(
+            listOf(RunEvent.RunStarted("r1", 1.0), RunEvent.RunCompleted("a", null, 2.0)),
+        )
         val repo = repo()
-        val threadId = repo.createThread("local ops")
+        repo.createThread("local ops")
         advanceUntilIdle()
 
-        repo.setPinned(threadId, true)
+        repo.setPinned("s1", true)
         assertTrue(repo.observeThreads().first().single().pinned)
-        repo.markRead(threadId)
+        repo.markRead("s1")
         assertEquals(false, repo.observeThreads().first().single().unread)
-        repo.deleteThread(threadId)
-        assertEquals(0, repo.observeThreads().first().size)
+        assertEquals(0, client.renameCalls.size)
+        assertEquals(0, client.deleteCalls.size)
     }
 
     @Test
     fun clearAll_wipesEverything() = runTest {
-        client.eventScripts.add(completedScript("a"))
+        client.createSessionResult = ApiResult.Ok(SessionDto(id = "s1"))
+        client.chatScripts.add(
+            listOf(RunEvent.RunStarted("r1", 1.0), RunEvent.RunCompleted("a", null, 2.0)),
+        )
         val repo = repo()
         repo.createThread("one")
         advanceUntilIdle()
@@ -343,7 +533,10 @@ class ThreadRepositoryTest {
 
     @Test
     fun exportJson_containsThreadsAndTurns() = runTest {
-        client.eventScripts.add(completedScript("answer text"))
+        client.createSessionResult = ApiResult.Ok(SessionDto(id = "s1"))
+        client.chatScripts.add(
+            listOf(RunEvent.RunStarted("r1", 1.0), RunEvent.RunCompleted("answer text", null, 2.0)),
+        )
         val repo = repo()
         repo.createThread("export me")
         advanceUntilIdle()
@@ -354,44 +547,30 @@ class ThreadRepositoryTest {
 
     @Test
     fun recoverIfRunning_completedWhileGone_persistsFromPoll() = runTest {
-        // Simulate a thread stuck in running with a synced user turn carrying a runId.
-        client.startRunResult = ApiResult.Ok(net.liquidx.leman.data.remote.RunAcceptedDto("run_9", "started"))
-        client.eventScripts.add(
-            listOf<Any>(HermesStreamException(ApiError.Network(IOException("app killed")))),
-        )
-        client.getRunResults.add(ApiResult.Ok(client.runDto("failed"))) // first life: fails
         val repo = repo()
-        val threadId = repo.createThread("interrupted")
-        advanceUntilIdle()
-
-        // Second life: the run actually finished server-side.
-        client.getRunResults.clear()
-        client.getRunResults.add(ApiResult.Ok(client.runDto("completed", output = "done while away")))
-        // Reset thread to running as if we died mid-run.
-        val failed = repo.observeTurns(threadId).first().single()
-        db.turnDao().upsertTurn(
-            db.turnDao().getTurn(failed.id)!!.copy(sendState = "synced", runId = "run_9"),
+        // Seed a thread stuck "running" as if the process died mid-run.
+        seedThread("s1", state = "running", preview = "interrupted")
+        seedUserTurn("t1", "s1", "interrupted", sendState = "synced", runId = "r1")
+        client.messagesBySession["s1"] = ApiResult.Ok(
+            listOf(
+                SessionMessageDto(1, "user", "interrupted", timestamp = 1.0),
+                SessionMessageDto(2, "assistant", "done while away", timestamp = 2.0, finishReason = "stop"),
+            ),
         )
-        db.threadDao().upsertThread(db.threadDao().getThread(threadId)!!.copy(state = "running"))
 
-        repo.recoverIfRunning(threadId)
+        repo.recoverIfRunning("s1")
         advanceUntilIdle()
-        val agent = repo.observeTurns(threadId).first().single { it.kind == TurnKind.Agent }
+        val agent = repo.observeTurns("s1").first().single { it.kind == TurnKind.Agent }
         assertEquals("done while away", agent.markdown)
         assertEquals(ThreadState.Idle, repo.observeThreads().first().single().state)
     }
 
     @Test
-    fun startRun_alwaysSendsThreadIdAsSessionId() = runTest {
-        client.eventScripts.add(completedScript("a"))
+    fun recoverIfRunning_noUserTurn_goesIdle() = runTest {
         val repo = repo()
-        val threadId = repo.createThread("s")
+        seedThread("s1", state = "running")
+        repo.recoverIfRunning("s1")
         advanceUntilIdle()
-        assertEquals(threadId, client.startRunCalls[0].second) // thread id IS the session id (spec 03)
-
-        client.eventScripts.add(completedScript("b"))
-        repo.sendMessage(threadId, "next")
-        advanceUntilIdle()
-        assertEquals(threadId, client.startRunCalls[1].second)
+        assertEquals(ThreadState.Idle, repo.observeThreads().first().single().state)
     }
 }

@@ -19,6 +19,7 @@ import net.liquidx.leman.domain.model.Settings
 data class NewThreadUiState(
     val agentName: String = Settings.DEFAULT_AGENT_NAME,
     val starting: Boolean = false,
+    val startFailed: Boolean = false,
 )
 
 sealed interface NewThreadEvent {
@@ -35,6 +36,9 @@ class NewThreadViewModel(
 
     private val starting = MutableStateFlow(false)
 
+    /** `POST /api/sessions` failed — stay on 2c and let the user retry the send (spec §4). */
+    private val startFailed = MutableStateFlow(false)
+
     /** One-shot: emits the created thread id → navigate to 2b. */
     private val _created = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val created: SharedFlow<String> = _created.asSharedFlow()
@@ -42,8 +46,9 @@ class NewThreadViewModel(
     val state: StateFlow<NewThreadUiState> = combine(
         settingsStore.settings,
         starting,
-    ) { settings, s ->
-        NewThreadUiState(agentName = settings.agentName, starting = s)
+        startFailed,
+    ) { settings, s, failed ->
+        NewThreadUiState(agentName = settings.agentName, starting = s, startFailed = failed)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), NewThreadUiState())
 
     fun onEvent(event: NewThreadEvent) {
@@ -52,9 +57,11 @@ class NewThreadViewModel(
                 val message = textState.text.toString().trim()
                 if (message.isEmpty() || starting.value) return
                 starting.value = true
+                startFailed.value = false
                 viewModelScope.launch {
                     val id = repo.createThread(message)
-                    _created.tryEmit(id)
+                    starting.value = false
+                    if (id != null) _created.tryEmit(id) else startFailed.value = true
                 }
             }
         }

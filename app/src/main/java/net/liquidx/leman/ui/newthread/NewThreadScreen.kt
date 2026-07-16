@@ -84,6 +84,14 @@ fun NewThreadScreen(
                     modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 112.dp),
                 )
             }
+            if (state.startFailed) {
+                Text(
+                    "▪ failed to start · try again",
+                    style = LemanType.meta,
+                    color = LemanColors.danger,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
             Box(Modifier.padding(top = 12.dp)) {
                 LemanButton(
                     label = "start thread ⏎",

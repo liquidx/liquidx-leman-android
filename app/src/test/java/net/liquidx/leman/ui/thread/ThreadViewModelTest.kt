@@ -27,6 +27,7 @@ class ThreadViewModelTest {
     val mainRule = MainDispatcherRule()
 
     private fun completedScript(output: String, withTrace: Boolean = false) = buildList<Any> {
+        add(RunEvent.RunStarted("r1", 0.1))
         if (withTrace) {
             add(RunEvent.Reasoning("thinking", 0.5))
             add(RunEvent.ToolStarted("web_search", "query", 1.0))
@@ -52,8 +53,8 @@ class ThreadViewModelTest {
     @Test
     fun traceExpansion_defaultsFromPref_overrideWins() = runTest {
         val h = VmHarness(this)
-        h.client.eventScripts.add(completedScript("answer", withTrace = true))
-        val threadId = h.repo.createThread("with trace")
+        h.client.chatScripts.add(completedScript("answer", withTrace = true))
+        val threadId = h.repo.createThread("with trace")!!
         advanceUntilIdle()
 
         val vm = vm(h, threadId)
@@ -76,8 +77,8 @@ class ThreadViewModelTest {
     fun traceExpansion_expandByDefaultPref_expandsWithoutOverride() = runTest {
         val h = VmHarness(this)
         h.settingsStore.update { it.copy(expandTracesByDefault = true) }
-        h.client.eventScripts.add(completedScript("answer", withTrace = true))
-        val threadId = h.repo.createThread("with trace")
+        h.client.chatScripts.add(completedScript("answer", withTrace = true))
+        val threadId = h.repo.createThread("with trace")!!
         advanceUntilIdle()
 
         val vm = vm(h, threadId)
@@ -93,14 +94,14 @@ class ThreadViewModelTest {
     @Test
     fun send_appendsUserTurn_streamingStateExposed() = runTest {
         val h = VmHarness(this)
-        h.client.eventScripts.add(completedScript("first"))
-        val threadId = h.repo.createThread("start")
+        h.client.chatScripts.add(completedScript("first"))
+        val threadId = h.repo.createThread("start")!!
         advanceUntilIdle()
 
         val vm = vm(h, threadId)
         vm.state.test {
             awaitUntil { it.loaded && it.turns.size == 2 }
-            h.client.eventScripts.add(completedScript("second answer"))
+            h.client.chatScripts.add(completedScript("second answer"))
             vm.onEvent(ThreadEvent.Send("follow up"))
             val after = awaitUntil { s -> s.turns.count { it.kind == TurnKind.User } == 2 }
             assertEquals("follow up", after.turns.last { it.kind == TurnKind.User }.markdown)
@@ -113,14 +114,14 @@ class ThreadViewModelTest {
     @Test
     fun actionTapped_sendsPayloadViaButton() = runTest {
         val h = VmHarness(this)
-        h.client.eventScripts.add(completedScript("ok"))
-        val threadId = h.repo.createThread("actions")
+        h.client.chatScripts.add(completedScript("ok"))
+        val threadId = h.repo.createThread("actions")!!
         advanceUntilIdle()
 
         val vm = vm(h, threadId)
         vm.state.test {
             awaitUntil { it.loaded && it.turns.isNotEmpty() }
-            h.client.eventScripts.add(completedScript("confirmed"))
+            h.client.chatScripts.add(completedScript("confirmed"))
             vm.onEvent(
                 ThreadEvent.ActionTapped(
                     net.liquidx.leman.domain.model.ActionButton(
@@ -140,8 +141,8 @@ class ThreadViewModelTest {
     @Test
     fun composer_disabledWhenNotConfigured_enabledWhenOnline() = runTest {
         val h = VmHarness(this)
-        h.client.eventScripts.add(completedScript("a"))
-        val threadId = h.repo.createThread("conn")
+        h.client.chatScripts.add(completedScript("a"))
+        val threadId = h.repo.createThread("conn")!!
         advanceUntilIdle()
 
         val vm = vm(h, threadId)
@@ -160,8 +161,8 @@ class ThreadViewModelTest {
     @Test
     fun openingThread_marksItRead() = runTest {
         val h = VmHarness(this)
-        h.client.eventScripts.add(completedScript("a"))
-        val threadId = h.repo.createThread("unread")
+        h.client.chatScripts.add(completedScript("a"))
+        val threadId = h.repo.createThread("unread")!!
         advanceUntilIdle()
         assertTrue(h.repo.observeThreads().first().single().unread)
 
