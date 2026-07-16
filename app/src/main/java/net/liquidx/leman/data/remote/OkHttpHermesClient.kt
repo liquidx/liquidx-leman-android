@@ -79,12 +79,20 @@ class OkHttpHermesClient(
         rest.connectionPool.evictAll()
     }
 
-    private fun Transport.request(path: String, accept: String = "application/json"): Request.Builder =
-        Request.Builder()
-            .url(baseUrl.newBuilder().addPathSegments(path).build())
+    private fun Transport.request(
+        path: String,
+        accept: String = "application/json",
+        query: List<Pair<String, String>> = emptyList(),
+    ): Request.Builder {
+        val url = baseUrl.newBuilder().addPathSegments(path)
+            .apply { query.forEach { (k, v) -> addQueryParameter(k, v) } }
+            .build()
+        return Request.Builder()
+            .url(url)
             .header("Authorization", "Bearer $apiKey")
             .header("Accept", accept)
             .header("User-Agent", userAgent)
+    }
 
     override suspend fun health(): ApiResult<HealthDto> =
         get("v1/health", HealthDto.serializer()) { it.probe }
@@ -130,6 +138,69 @@ class OkHttpHermesClient(
             val source = resp.body?.source() ?: throw HermesStreamException(ApiError.Protocol("empty stream body"))
             try {
                 for (frame in readSseDataFrames(source)) emit(parseRunEvent(frame))
+            } catch (e: java.io.IOException) {
+                throw HermesStreamException(mapException(e))
+            }
+        }
+    }.flowOn(Dispatchers.IO)
+
+    override suspend fun capabilities(): ApiResult<CapabilitiesDto> =
+        get("v1/capabilities", CapabilitiesDto.serializer()) { it.rest }
+
+    override suspend fun listSessions(limit: Int, offset: Int): ApiResult<SessionListDto> {
+        val t = transport ?: return ApiResult.Err(ApiError.NotConfigured)
+        val request = t.request(
+            "api/sessions",
+            query = listOf("limit" to "$limit", "offset" to "$offset"),
+        ).get().build()
+        return execute(t.rest, request) { HermesJson.decodeFromString(SessionListDto.serializer(), it) }
+    }
+
+    override suspend fun sessionMessages(id: String): ApiResult<List<SessionMessageDto>> {
+        val t = transport ?: return ApiResult.Err(ApiError.NotConfigured)
+        return execute(t.rest, t.request("api/sessions/$id/messages").get().build()) {
+            HermesJson.decodeFromString(SessionMessagesDto.serializer(), it).data
+        }
+    }
+
+    override suspend fun createSession(): ApiResult<SessionDto> {
+        val t = transport ?: return ApiResult.Err(ApiError.NotConfigured)
+        val request = t.request("api/sessions").post("{}".toRequestBody(jsonMediaType)).build()
+        return execute(t.rest, request) {
+            HermesJson.decodeFromString(SessionEnvelopeDto.serializer(), it).session
+        }
+    }
+
+    override suspend fun renameSession(id: String, title: String): ApiResult<Unit> {
+        val t = transport ?: return ApiResult.Err(ApiError.NotConfigured)
+        val body = HermesJson.encodeToString(SessionPatchDto.serializer(), SessionPatchDto(title))
+        val request = t.request("api/sessions/$id").patch(body.toRequestBody(jsonMediaType)).build()
+        // response body shape is unpinned upstream — success is all we need
+        return execute(t.rest, request) { }
+    }
+
+    override suspend fun deleteSession(id: String): ApiResult<Unit> {
+        val t = transport ?: return ApiResult.Err(ApiError.NotConfigured)
+        return execute(t.rest, t.request("api/sessions/$id").delete().build()) { }
+    }
+
+    override fun chatStream(id: String, message: String): Flow<RunEvent> = flow {
+        val t = transport ?: throw HermesStreamException(ApiError.NotConfigured)
+        val body = HermesJson.encodeToString(ChatRequestDto.serializer(), ChatRequestDto(message))
+        val request = t.request("api/sessions/$id/chat/stream", accept = "text/event-stream")
+            .post(body.toRequestBody(jsonMediaType))
+            .build()
+        val response = try {
+            t.stream.newCall(request).execute()
+        } catch (e: Exception) {
+            throw HermesStreamException(mapException(e))
+        }
+        response.use { resp ->
+            if (!resp.isSuccessful) throw HermesStreamException(mapHttpFailure(resp))
+            val source = resp.body?.source()
+                ?: throw HermesStreamException(ApiError.Protocol("empty stream body"))
+            try {
+                for (frame in readSseFrames(source)) emit(parseChatEvent(frame))
             } catch (e: java.io.IOException) {
                 throw HermesStreamException(mapException(e))
             }

@@ -23,6 +23,19 @@ interface HermesClient {
 
     /** Tear down and rebuild transport when base URL or key changes (spec 02). */
     fun reconfigure(baseUrl: String?, apiKey: String?)
+
+    suspend fun capabilities(): ApiResult<CapabilitiesDto>
+    suspend fun listSessions(limit: Int, offset: Int): ApiResult<SessionListDto>
+    suspend fun sessionMessages(id: String): ApiResult<List<SessionMessageDto>>
+    suspend fun createSession(): ApiResult<SessionDto>
+    suspend fun renameSession(id: String, title: String): ApiResult<Unit>
+    suspend fun deleteSession(id: String): ApiResult<Unit>
+
+    /**
+     * Cold flow of a Sessions chat run's events (spec 02 §Sessions). Same
+     * completion/failure contract as [runEvents].
+     */
+    fun chatStream(id: String, message: String): Flow<RunEvent>
 }
 
 class HermesStreamException(val apiError: net.liquidx.leman.domain.model.ApiError) :

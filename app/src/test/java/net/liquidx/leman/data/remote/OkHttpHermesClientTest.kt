@@ -145,4 +145,72 @@ class OkHttpHermesClientTest {
         client.reconfigure(server.url("/").toString(), null)
         assertEquals(ApiError.NotConfigured, client.health().errorOrNull())
     }
+
+    @Test
+    fun listSessions_getsPagedPath_andDecodes() = runTest {
+        server.enqueue(MockResponse().setBody(
+            """{"object":"list","data":[{"id":"run_a","source":"cron","last_active":2.0}],"has_more":false}""",
+        ))
+        val result = client.listSessions(limit = 50, offset = 0) as ApiResult.Ok
+        assertEquals("run_a", result.value.data.single().id)
+        val req = server.takeRequest()
+        assertEquals("/api/sessions?limit=50&offset=0", req.path)
+        assertEquals("GET", req.method)
+        assertTrue(req.getHeader("Authorization")!!.startsWith("Bearer "))
+    }
+
+    @Test
+    fun sessionMessages_decodesList() = runTest {
+        server.enqueue(MockResponse().setBody(
+            """{"object":"list","session_id":"s1","data":[{"id":1,"role":"user","content":"hi","timestamp":1.0}]}""",
+        ))
+        val result = client.sessionMessages("s1") as ApiResult.Ok
+        assertEquals("hi", result.value.single().content)
+        assertEquals("/api/sessions/s1/messages", server.takeRequest().path)
+    }
+
+    @Test
+    fun createSession_postsEmptyObject_unwrapsEnvelope() = runTest {
+        server.enqueue(MockResponse().setBody(
+            """{"object":"hermes.session","session":{"id":"api_1_a","source":"api_server"}}""",
+        ))
+        val result = client.createSession() as ApiResult.Ok
+        assertEquals("api_1_a", result.value.id)
+        val req = server.takeRequest()
+        assertEquals("POST", req.method)
+        assertEquals("{}", req.body.readUtf8())
+    }
+
+    @Test
+    fun renameSession_patchesTitle() = runTest {
+        server.enqueue(MockResponse().setBody("{}"))
+        client.renameSession("s1", "new title")
+        val req = server.takeRequest()
+        assertEquals("PATCH", req.method)
+        assertEquals("/api/sessions/s1", req.path)
+        assertEquals("""{"title":"new title"}""", req.body.readUtf8())
+    }
+
+    @Test
+    fun deleteSession_deletes() = runTest {
+        server.enqueue(MockResponse().setBody("""{"deleted":true}"""))
+        assertTrue(client.deleteSession("s1") is ApiResult.Ok)
+        assertEquals("DELETE", server.takeRequest().method)
+    }
+
+    @Test
+    fun chatStream_parsesNamedEvents() = runTest {
+        server.enqueue(MockResponse().setBody(
+            "event: run.started\ndata: {\"run_id\":\"r1\",\"ts\":1.0}\n\n" +
+            "event: assistant.delta\ndata: {\"delta\":\"ok\",\"ts\":2.0}\n\n" +
+            "event: run.completed\ndata: {\"messages\":[{\"role\":\"assistant\",\"content\":\"ok\",\"finish_reason\":\"stop\"}],\"ts\":3.0}\n\n",
+        ))
+        val events = client.chatStream("s1", "hello").toList()
+        assertEquals(RunEvent.RunStarted("r1", 1.0), events[0])
+        assertEquals(RunEvent.MessageDelta("ok", 2.0), events[1])
+        assertEquals("ok", (events[2] as RunEvent.RunCompleted).output)
+        val req = server.takeRequest()
+        assertEquals("/api/sessions/s1/chat/stream", req.path)
+        assertEquals("""{"message":"hello"}""", req.body.readUtf8())
+    }
 }

@@ -7,11 +7,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
+import net.liquidx.leman.data.remote.CapabilitiesDto
 import net.liquidx.leman.data.remote.HealthDto
 import net.liquidx.leman.data.remote.HermesClient
 import net.liquidx.leman.data.remote.HermesStreamException
 import net.liquidx.leman.data.remote.RunAcceptedDto
 import net.liquidx.leman.data.remote.RunDto
+import net.liquidx.leman.data.remote.SessionDto
+import net.liquidx.leman.data.remote.SessionListDto
+import net.liquidx.leman.data.remote.SessionMessageDto
 import net.liquidx.leman.data.remote.WireMessage
 import net.liquidx.leman.domain.model.ApiError
 import net.liquidx.leman.domain.model.ApiResult
@@ -117,6 +121,27 @@ class FakeHermesServer : HermesClient {
 
     override fun reconfigure(baseUrl: String?, apiKey: String?) = Unit
 
+    // TODO(task 12): real Sessions fake behavior. Stubs for now so debug compiles.
+    override suspend fun capabilities(): ApiResult<CapabilitiesDto> =
+        ApiResult.Err(ApiError.Client(404, "not implemented"))
+
+    override suspend fun listSessions(limit: Int, offset: Int): ApiResult<SessionListDto> =
+        ApiResult.Err(ApiError.Client(404, "not implemented"))
+
+    override suspend fun sessionMessages(id: String): ApiResult<List<SessionMessageDto>> =
+        ApiResult.Err(ApiError.Client(404, "not implemented"))
+
+    override suspend fun createSession(): ApiResult<SessionDto> =
+        ApiResult.Err(ApiError.Client(404, "not implemented"))
+
+    override suspend fun renameSession(id: String, title: String): ApiResult<Unit> =
+        ApiResult.Err(ApiError.Client(404, "not implemented"))
+
+    override suspend fun deleteSession(id: String): ApiResult<Unit> =
+        ApiResult.Err(ApiError.Client(404, "not implemented"))
+
+    override fun chatStream(id: String, message: String): Flow<RunEvent> = flow { }
+
     private fun scriptFor(scenario: FakeScenario, userText: String): List<RunEvent> {
         val output = outputFor(scenario, userText)
         return when (scenario) {
@@ -213,6 +238,24 @@ class SwitchableHermesClient(
     }
 
     override fun reconfigure(baseUrl: String?, apiKey: String?) = real.reconfigure(baseUrl, apiKey)
+
+    override suspend fun capabilities() = active.capabilities()
+    override suspend fun listSessions(limit: Int, offset: Int) = active.listSessions(limit, offset)
+    override suspend fun sessionMessages(id: String) = active.sessionMessages(id)
+    override suspend fun createSession() = active.createSession()
+    override suspend fun renameSession(id: String, title: String) = active.renameSession(id, title)
+    override suspend fun deleteSession(id: String) = active.deleteSession(id)
+
+    override fun chatStream(id: String, message: String): Flow<RunEvent> = flow {
+        var count = 0
+        active.chatStream(id, message).collect { event ->
+            bus.logEvent(event.eventName(), event.timestamp, event.payloadPreview())
+            if (chaos.flags.value.dropStream && ++count >= 5) {
+                throw HermesStreamException(ApiError.Network(IOException("chaos stream drop")))
+            }
+            emit(event)
+        }
+    }
 }
 
 fun RunEvent.eventName(): String = when (this) {
