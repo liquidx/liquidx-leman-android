@@ -2,11 +2,14 @@ package net.liquidx.leman.debug
 
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.serialization.json.JsonPrimitive
 import net.liquidx.leman.data.remote.CapabilitiesDto
 import net.liquidx.leman.data.remote.HealthDto
 import net.liquidx.leman.data.remote.HermesClient
@@ -51,6 +54,90 @@ class FakeHermesServer : HermesClient {
 
     private val runs = ConcurrentHashMap<String, FakeRun>()
     private val counter = AtomicInteger(0)
+
+    /** Mutable holder so seed + chat traffic can update a session's dto/messages in place. */
+    private class SessionState(dto: SessionDto) {
+        @Volatile var dto: SessionDto = dto
+        val messages = CopyOnWriteArrayList<SessionMessageDto>()
+
+        fun touch(atMs: Long, messageCount: Int) {
+            dto = dto.copy(lastActive = atMs / 1000.0, messageCount = messageCount)
+        }
+    }
+
+    private val sessions = ConcurrentHashMap<String, SessionState>()
+    private val messageIdSeq = AtomicLong(1)
+    private val sessionApiCounter = AtomicInteger(0)
+
+    init {
+        val nowMs = System.currentTimeMillis()
+        val hour = 3_600_000L
+        val minute = 60_000L
+
+        // (1) cron digest: source "cron", a single assistant message, no user turn.
+        val cronAtMs = nowMs - 20 * hour
+        sessions["fake-cron-1"] = SessionState(
+            SessionDto(
+                id = "fake-cron-1",
+                source = "cron",
+                title = "daily digest",
+                startedAt = cronAtMs / 1000.0,
+                lastActive = cronAtMs / 1000.0,
+                messageCount = 1,
+            ),
+        ).also { state ->
+            state.messages.add(
+                SessionMessageDto(
+                    id = messageIdSeq.getAndIncrement(),
+                    role = "assistant",
+                    content = SampleCorpus.ciDiagnosisMarkdown,
+                    timestamp = cronAtMs / 1000.0,
+                ),
+            )
+        }
+
+        // (2) api_server conversation from the geneva/needs-you corpus.
+        val genevaUserAtMs = nowMs - 3 * hour - 4 * minute
+        val genevaAssistantAtMs = nowMs - 3 * hour
+        sessions["fake-session-2"] = SessionState(
+            SessionDto(
+                id = "fake-session-2",
+                source = "api_server",
+                startedAt = genevaUserAtMs / 1000.0,
+                lastActive = genevaAssistantAtMs / 1000.0,
+                messageCount = 2,
+            ),
+        ).also { state ->
+            state.messages.add(
+                SessionMessageDto(
+                    id = messageIdSeq.getAndIncrement(),
+                    role = "user",
+                    content = "book me a train to geneva next friday morning, under 80 chf if possible",
+                    timestamp = genevaUserAtMs / 1000.0,
+                ),
+            )
+            state.messages.add(
+                SessionMessageDto(
+                    id = messageIdSeq.getAndIncrement(),
+                    role = "assistant",
+                    content = SampleCorpus.genevaOptionsMarkdown,
+                    timestamp = genevaAssistantAtMs / 1000.0,
+                ),
+            )
+        }
+
+        // (3) empty, just-created session — nothing sent yet.
+        val freshAtMs = nowMs - minute
+        sessions["fake-session-3"] = SessionState(
+            SessionDto(
+                id = "fake-session-3",
+                source = "api_server",
+                startedAt = freshAtMs / 1000.0,
+                lastActive = freshAtMs / 1000.0,
+                messageCount = 0,
+            ),
+        )
+    }
 
     override suspend fun health(): ApiResult<HealthDto> =
         ApiResult.Ok(HealthDto("ok", "hermes-agent (fake)", "0.18.0-fake"))
@@ -121,26 +208,99 @@ class FakeHermesServer : HermesClient {
 
     override fun reconfigure(baseUrl: String?, apiKey: String?) = Unit
 
-    // TODO(task 12): real Sessions fake behavior. Stubs for now so debug compiles.
-    override suspend fun capabilities(): ApiResult<CapabilitiesDto> =
-        ApiResult.Err(ApiError.Client(404, "not implemented"))
+    /** Both session flags on — the fake always looks like a fully-capable gateway. */
+    override suspend fun capabilities(): ApiResult<CapabilitiesDto> = ApiResult.Ok(
+        CapabilitiesDto(
+            version = "0.18.0-fake",
+            features = mapOf(
+                "session_resources" to JsonPrimitive(true),
+                "session_chat_streaming" to JsonPrimitive(true),
+            ),
+        ),
+    )
 
-    override suspend fun listSessions(limit: Int, offset: Int): ApiResult<SessionListDto> =
-        ApiResult.Err(ApiError.Client(404, "not implemented"))
+    override suspend fun listSessions(limit: Int, offset: Int): ApiResult<SessionListDto> {
+        val all = sessions.values.map { it.dto }.sortedByDescending { it.lastActive }
+        val page = all.drop(offset).take(limit)
+        return ApiResult.Ok(SessionListDto(data = page, hasMore = offset + page.size < all.size))
+    }
 
-    override suspend fun sessionMessages(id: String): ApiResult<List<SessionMessageDto>> =
-        ApiResult.Err(ApiError.Client(404, "not implemented"))
+    override suspend fun sessionMessages(id: String): ApiResult<List<SessionMessageDto>> {
+        val state = sessions[id] ?: return ApiResult.Err(ApiError.Client(404, "session not found"))
+        return ApiResult.Ok(state.messages.toList())
+    }
 
-    override suspend fun createSession(): ApiResult<SessionDto> =
-        ApiResult.Err(ApiError.Client(404, "not implemented"))
+    override suspend fun createSession(): ApiResult<SessionDto> {
+        val id = "fake-api-${sessionApiCounter.incrementAndGet()}"
+        val now = System.currentTimeMillis()
+        val dto = SessionDto(
+            id = id,
+            source = "api_server",
+            startedAt = now / 1000.0,
+            lastActive = now / 1000.0,
+            messageCount = 0,
+        )
+        sessions[id] = SessionState(dto)
+        return ApiResult.Ok(dto)
+    }
 
-    override suspend fun renameSession(id: String, title: String): ApiResult<Unit> =
-        ApiResult.Err(ApiError.Client(404, "not implemented"))
+    override suspend fun renameSession(id: String, title: String): ApiResult<Unit> {
+        val state = sessions[id] ?: return ApiResult.Err(ApiError.Client(404, "session not found"))
+        state.dto = state.dto.copy(title = title)
+        return ApiResult.Ok(Unit)
+    }
 
-    override suspend fun deleteSession(id: String): ApiResult<Unit> =
-        ApiResult.Err(ApiError.Client(404, "not implemented"))
+    override suspend fun deleteSession(id: String): ApiResult<Unit> {
+        val removed = sessions.remove(id) != null
+        return if (removed) ApiResult.Ok(Unit) else ApiResult.Err(ApiError.Client(404, "session not found"))
+    }
 
-    override fun chatStream(id: String, message: String): Flow<RunEvent> = flow { }
+    /**
+     * Translates [scriptFor]'s run-vocabulary events into the chat vocabulary:
+     * `run.started` first, deltas/tool events unchanged (with Streaming's
+     * pacing), `run.completed` last. Appends both sides of the exchange to the
+     * session store on completion so the next [listSessions]/[sessionMessages]
+     * (or [net.liquidx.leman.data.repo.SessionSyncer] tick) sees them.
+     */
+    override fun chatStream(id: String, message: String): Flow<RunEvent> = flow {
+        val state = sessions[id] ?: throw HermesStreamException(ApiError.Client(404, "session not found"))
+        val current = scenario.value
+
+        val userNow = System.currentTimeMillis()
+        state.messages.add(
+            SessionMessageDto(
+                id = messageIdSeq.getAndIncrement(),
+                role = "user",
+                content = message,
+                timestamp = userNow / 1000.0,
+            ),
+        )
+        state.touch(userNow, state.messages.size)
+
+        val runId = "fake-run-${counter.incrementAndGet()}"
+        emit(RunEvent.RunStarted(runId, 0.5))
+
+        var output = ""
+        val reasoningParts = mutableListOf<String>()
+        for (event in scriptFor(current, message)) {
+            if (event is RunEvent.Reasoning) reasoningParts += event.text
+            if (event is RunEvent.RunCompleted) output = event.output
+            emit(event)
+            if (current == FakeScenario.Streaming) delay(STREAM_DELAY_MS)
+        }
+
+        val assistantNow = System.currentTimeMillis()
+        state.messages.add(
+            SessionMessageDto(
+                id = messageIdSeq.getAndIncrement(),
+                role = "assistant",
+                content = output,
+                reasoning = reasoningParts.takeIf { it.isNotEmpty() }?.joinToString("\n\n"),
+                timestamp = assistantNow / 1000.0,
+            ),
+        )
+        state.touch(assistantNow, state.messages.size)
+    }
 
     private fun scriptFor(scenario: FakeScenario, userText: String): List<RunEvent> {
         val output = outputFor(scenario, userText)
