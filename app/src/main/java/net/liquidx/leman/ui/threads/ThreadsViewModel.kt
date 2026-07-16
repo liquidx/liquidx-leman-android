@@ -32,6 +32,7 @@ data class ThreadListItem(
     val stateLabel: String,
     val tone: StateTone,
     val timeLabel: String,
+    val sourceLabel: String? = null,
 )
 
 data class ThreadSection(
@@ -155,6 +156,7 @@ class ThreadsViewModel(
             stateLabel = label,
             tone = tone,
             timeLabel = if (state == ThreadState.Running) "now" else TimeFormat.timeLabel(lastActiveAt, now, zone),
+            sourceLabel = source.takeIf { it != "api_server" },
         )
     }
 }

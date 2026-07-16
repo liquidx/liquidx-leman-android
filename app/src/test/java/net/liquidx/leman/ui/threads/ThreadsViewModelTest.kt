@@ -121,6 +121,21 @@ class ThreadsViewModelTest {
     }
 
     @Test
+    fun sourceLabel_nonApiServerSourceShown_apiServerSourceHidden() = runTest {
+        val h = VmHarness(this)
+        h.db.threadDao().upsertThread(entity("cron1", "cron thread", lastActiveAt = h.now, source = "cron"))
+        h.db.threadDao().upsertThread(entity("app1", "app thread", lastActiveAt = h.now, source = "api_server"))
+        val vm = vm(h)
+        vm.state.test {
+            val items = awaitLoaded().sections.flatMap { it.items }.associateBy { it.id }
+            assertEquals("cron", items["cron1"]?.sourceLabel)
+            assertEquals(null, items["app1"]?.sourceLabel)
+            cancelAndIgnoreRemainingEvents()
+        }
+        h.close()
+    }
+
+    @Test
     fun togglePin_delegatesToRepository() = runTest {
         val h = VmHarness(this)
         h.db.threadDao().upsertThread(entity("a", "pin me", lastActiveAt = h.now))

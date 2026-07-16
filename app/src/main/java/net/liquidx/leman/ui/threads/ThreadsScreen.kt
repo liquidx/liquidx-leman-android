@@ -126,6 +126,7 @@ fun ThreadsScreen(
                         pinned = item.pinned,
                         onOpen = { onOpenThread(item.id) },
                         onTogglePin = { onEvent(ThreadsEvent.TogglePin(item.id)) },
+                        sourceLabel = item.sourceLabel,
                     )
                 }
             }

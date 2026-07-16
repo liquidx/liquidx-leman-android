@@ -60,7 +60,7 @@ private fun LemanButtonPreview() {
     ) {
         LemanButton("confirm booking", {}, kind = LemanButtonKind.Primary)
         LemanButton("see options", {})
-        LemanButton("clear all threads", {}, kind = LemanButtonKind.Danger)
+        LemanButton("clear local cache", {}, kind = LemanButtonKind.Danger)
         LemanButton("dismiss", {}, kind = LemanButtonKind.Dismiss)
     }
 }

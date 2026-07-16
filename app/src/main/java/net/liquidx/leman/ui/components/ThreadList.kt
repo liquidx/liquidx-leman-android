@@ -117,6 +117,7 @@ fun ThreadRow(
     onOpen: () -> Unit,
     onTogglePin: () -> Unit,
     modifier: Modifier = Modifier,
+    sourceLabel: String? = null,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -155,6 +156,9 @@ fun ThreadRow(
                 modifier = Modifier.padding(top = 2.dp),
             )
             Row(modifier = Modifier.padding(top = 3.dp)) {
+                if (sourceLabel != null) {
+                    Text("$sourceLabel · ", style = LemanType.meta, color = LemanColors.textFaint)
+                }
                 Text("▪ ", style = LemanType.meta, color = stateColor)
                 Text(stateLabel, style = LemanType.meta, color = stateColor)
                 Text(" · $timeLabel", style = LemanType.meta, color = LemanColors.textFaint)

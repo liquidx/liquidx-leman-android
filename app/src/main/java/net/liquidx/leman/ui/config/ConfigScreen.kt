@@ -79,6 +79,7 @@ fun ConfigScreen(
                     is ConnState.Online -> "▪ connected"
                     ConnState.Checking -> "▪ connecting…"
                     is ConnState.Unauthorized -> "▪ auth failed"
+                    is ConnState.Unsupported -> "▪ unsupported gateway"
                     else -> "▪ offline"
                 },
                 rightAccent = state.connState is ConnState.Online,
@@ -190,7 +191,7 @@ fun ConfigScreen(
             ) {
                 LemanButton("export threads", onExport)
                 LemanButton(
-                    if (state.confirmClearArmed) "tap again to confirm" else "clear all threads",
+                    if (state.confirmClearArmed) "tap again to confirm" else "clear local cache",
                     { onEvent(ConfigEvent.ClearAllThreads) },
                     kind = LemanButtonKind.Danger,
                 )
