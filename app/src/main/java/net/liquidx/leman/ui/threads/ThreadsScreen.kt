@@ -6,12 +6,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -72,17 +71,17 @@ fun ThreadsScreen(
             })
         },
     ) {
-        var filterText by remember { mutableStateOf(state.filter) }
+        val filterState = rememberTextFieldState(state.filter)
+        LaunchedEffect(filterState) {
+            snapshotFlow { filterState.text.toString() }
+                .collect { onEvent(ThreadsEvent.SetFilter(it)) }
+        }
         LazyColumn {
             // Filter row scrolls with the list — it is not pinned (design 2a).
             item(key = "filter") {
                 Box(Modifier.padding(horizontal = 18.dp, vertical = 8.dp)) {
                     PromptField(
-                        value = filterText,
-                        onValueChange = {
-                            filterText = it
-                            onEvent(ThreadsEvent.SetFilter(it))
-                        },
+                        state = filterState,
                         placeholder = "filter threads",
                         hint = "⏎ find",
                     )
@@ -153,8 +152,7 @@ private fun NewThreadField(onNewThread: () -> Unit) {
     ) {
         Box {
             PromptField(
-                value = "",
-                onValueChange = {},
+                state = rememberTextFieldState(),
                 placeholder = "new thread",
                 hint = "⏎ start",
                 accentBorder = true,

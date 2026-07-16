@@ -9,6 +9,7 @@ import net.liquidx.leman.domain.model.ApiResult
 import net.liquidx.leman.domain.model.RunEvent
 import net.liquidx.leman.testutil.MainDispatcherRule
 import net.liquidx.leman.testutil.VmHarness
+import net.liquidx.leman.testutil.type
 import net.liquidx.leman.ui.threads.awaitUntil
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -42,18 +43,39 @@ class ConfigViewModelTest {
         vm.state.test {
             awaitUntil { it.loaded }
 
-            vm.onEvent(ConfigEvent.SetServerUrlInput("not a url"))
+            vm.serverUrlState.type("not a url")
             vm.onEvent(ConfigEvent.SaveServerUrl)
             assertNotNull(awaitUntil { it.urlError != null }.urlError)
 
-            vm.onEvent(ConfigEvent.SetServerUrlInput("http://insecure.example"))
+            vm.serverUrlState.type("http://insecure.example")
+            advanceUntilIdle() // editing clears the previous error first
             vm.onEvent(ConfigEvent.SaveServerUrl)
             assertNotNull(awaitUntil { it.urlError != null }.urlError) // http rejected in release
 
-            vm.onEvent(ConfigEvent.SetServerUrlInput("https://gw.example/"))
+            vm.serverUrlState.type("https://gw.example/")
             vm.onEvent(ConfigEvent.SaveServerUrl)
             val saved = awaitUntil { it.settings.serverUrl == "https://gw.example" }
             assertNull(saved.urlError)
+            // the field reflects the normalized origin after save
+            advanceUntilIdle()
+            assertEquals("https://gw.example", vm.serverUrlState.text.toString())
+            cancelAndIgnoreRemainingEvents()
+        }
+        h.close()
+    }
+
+    @Test
+    fun saveServerUrl_typingClearsValidationError() = runTest {
+        val h = VmHarness(this)
+        val vm = vm(h)
+        vm.state.test {
+            awaitUntil { it.loaded }
+            vm.serverUrlState.type("not a url")
+            vm.onEvent(ConfigEvent.SaveServerUrl)
+            assertNotNull(awaitUntil { it.urlError != null }.urlError)
+
+            vm.serverUrlState.type("not a url, but edited")
+            assertNull(awaitUntil { it.urlError == null }.urlError)
             cancelAndIgnoreRemainingEvents()
         }
         h.close()
@@ -65,7 +87,7 @@ class ConfigViewModelTest {
         val vm = vm(h, allowHttp = true)
         vm.state.test {
             awaitUntil { it.loaded }
-            vm.onEvent(ConfigEvent.SetServerUrlInput("http://10.0.2.2:8080"))
+            vm.serverUrlState.type("http://10.0.2.2:8080")
             vm.onEvent(ConfigEvent.SaveServerUrl)
             awaitUntil { it.settings.serverUrl == "http://10.0.2.2:8080" }
             cancelAndIgnoreRemainingEvents()
@@ -121,16 +143,52 @@ class ConfigViewModelTest {
     }
 
     @Test
+    fun agentName_seedsFieldFromStoredSettingsOnce() = runTest {
+        val h = VmHarness(this)
+        h.settingsStore.update { it.copy(agentName = "zephyr") }
+        advanceUntilIdle()
+        val vm = vm(h)
+        vm.state.test {
+            awaitUntil { it.loaded }
+            advanceUntilIdle()
+            assertEquals("zephyr", vm.agentNameState.text.toString())
+            cancelAndIgnoreRemainingEvents()
+        }
+        h.close()
+    }
+
+    @Test
+    fun agentName_editsPersist_withoutFieldEverBeingRewritten() = runTest {
+        val h = VmHarness(this)
+        val vm = vm(h)
+        vm.state.test {
+            awaitUntil { it.loaded }
+            advanceUntilIdle() // seeding done
+            // simulate fast typing: two edits before persistence catches up
+            vm.agentNameState.type("jun")
+            vm.agentNameState.type("juno II")
+            awaitUntil { it.settings.agentName == "juno II" }
+            // late DataStore emissions must never revert the field text
+            advanceUntilIdle()
+            assertEquals("juno II", vm.agentNameState.text.toString())
+            assertEquals("juno II", vm.state.value.settings.agentName)
+            cancelAndIgnoreRemainingEvents()
+        }
+        h.close()
+    }
+
+    @Test
     fun saveApiKey_storesMasksAndReconfigures() = runTest {
         val h = VmHarness(this)
         val vm = vm(h)
         vm.state.test {
             awaitUntil { it.loaded }
-            vm.onEvent(ConfigEvent.SetApiKeyInput("hm_0123456789abcdef3kf2"))
+            vm.apiKeyState.type("hm_0123456789abcdef3kf2")
             vm.onEvent(ConfigEvent.SaveApiKey)
             val masked = awaitUntil { it.apiKeyMasked != null }.apiKeyMasked
             assertEquals("hm_" + "••••••••••••" + "3kf2", masked)
             assertEquals("hm_0123456789abcdef3kf2", h.apiKeyStore.get())
+            assertEquals("", vm.apiKeyState.text.toString()) // input cleared after save
             cancelAndIgnoreRemainingEvents()
         }
         h.close()

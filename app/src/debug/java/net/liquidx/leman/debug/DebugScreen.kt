@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Text
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -56,10 +57,11 @@ fun DebugScreen(hooks: DebugHooksImpl, navController: NavController) {
     val scenario = hooks.switchable?.fake?.scenario?.collectAsState()
 
     var eventsPaused by remember { mutableStateOf(false) }
-    var eventFilter by remember { mutableStateOf("") }
+    val eventFilterState = rememberTextFieldState()
     var expandedNetId by remember { mutableStateOf<Long?>(null) }
-    var playground by remember { mutableStateOf("") }
+    val playgroundState = rememberTextFieldState()
 
+    val eventFilter = eventFilterState.text.toString()
     val frozenEvents = remember(eventsPaused) { if (eventsPaused) events else null }
     val shownEvents = (frozenEvents ?: events)
         .filter { eventFilter.isBlank() || it.name.contains(eventFilter, true) || it.payload.contains(eventFilter, true) }
@@ -204,7 +206,7 @@ fun DebugScreen(hooks: DebugHooksImpl, navController: NavController) {
                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 4.dp),
                 ) {
                     Box(Modifier.weight(1f)) {
-                        PromptField(eventFilter, { eventFilter = it }, placeholder = "filter events")
+                        PromptField(eventFilterState, placeholder = "filter events")
                     }
                     LemanButton(if (eventsPaused) "resume" else "pause", { eventsPaused = !eventsPaused })
                 }
@@ -222,11 +224,11 @@ fun DebugScreen(hooks: DebugHooksImpl, navController: NavController) {
                 SectionHeader("render")
                 DebugCaption("markdown playground — renders through MarkdownBody live")
                 Box(Modifier.padding(horizontal = 18.dp, vertical = 6.dp)) {
-                    PromptField(playground, { playground = it }, placeholder = "type markdown…")
+                    PromptField(playgroundState, placeholder = "type markdown…")
                 }
-                if (playground.isNotBlank()) {
+                if (playgroundState.text.isNotBlank()) {
                     Box(Modifier.padding(horizontal = 18.dp, vertical = 6.dp)) {
-                        MarkdownBody(playground)
+                        MarkdownBody(playgroundState.text.toString())
                     }
                 }
                 Box(Modifier.height(24.dp))

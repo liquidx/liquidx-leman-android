@@ -19,8 +19,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -71,11 +73,14 @@ fun BlinkingCaret(modifier: Modifier = Modifier, width: Int = 7, height: Int = 1
  * The one reusable input (spec 06): accent `>` prompt, mono text, blinking
  * caret when empty, right `⏎ hint`. Hairline variant for search/composer;
  * accent-border variant for the primary new-thread affordances.
+ *
+ * State-based on purpose: the field owns its text buffer, so callers must
+ * never write the value back per keystroke (an async round-trip through a
+ * ViewModel resets the cursor mid-typing).
  */
 @Composable
 fun PromptField(
-    value: String,
-    onValueChange: (String) -> Unit,
+    state: TextFieldState,
     placeholder: String,
     modifier: Modifier = Modifier,
     hint: String? = null,
@@ -95,7 +100,7 @@ fun PromptField(
     ) {
         Text("> ", style = LemanType.body, color = LemanColors.accent.copy(alpha = alpha))
         Box(Modifier.weight(1f)) {
-            if (value.isEmpty()) {
+            if (state.text.isEmpty()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         placeholder,
@@ -106,16 +111,13 @@ fun PromptField(
                 }
             }
             BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
+                state = state,
                 enabled = enabled,
                 textStyle = LemanType.body.copy(color = LemanColors.textPrimary),
                 cursorBrush = SolidColor(LemanColors.accent),
-                singleLine = true,
+                lineLimits = TextFieldLineLimits.SingleLine,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(
-                    onSend = { if (value.isNotBlank()) onSubmit() },
-                ),
+                onKeyboardAction = { if (state.text.isNotBlank()) onSubmit() },
                 modifier = Modifier.fillMaxWidth(),
             )
         }
@@ -195,9 +197,9 @@ private fun InputsPreview() {
         verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
         modifier = Modifier.padding(16.dp),
     ) {
-        PromptField("", {}, placeholder = "filter threads", hint = "⏎ find")
-        PromptField("", {}, placeholder = "new thread", hint = "⏎ start", accentBorder = true)
-        PromptField("book train to geneva", {}, placeholder = "message juno", hint = "⏎ send")
+        PromptField(rememberTextFieldState(), placeholder = "filter threads", hint = "⏎ find")
+        PromptField(rememberTextFieldState(), placeholder = "new thread", hint = "⏎ start", accentBorder = true)
+        PromptField(rememberTextFieldState("book train to geneva"), placeholder = "message juno", hint = "⏎ send")
         Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
             LemanToggle(true, {})
             LemanToggle(false, {})

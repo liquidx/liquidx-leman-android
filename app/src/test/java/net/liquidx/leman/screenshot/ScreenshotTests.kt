@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -173,7 +174,6 @@ class ScreenshotTests {
     fun config_default() = snap("2d-config") {
         ConfigScreen(
             state = ConfigUiState(
-                serverUrlInput = "https://api.gent.ino.ink",
                 apiKeyMasked = "hm_••••••••••••3kf2",
                 connState = ConnState.Online("0.18.0"),
                 testResult = TestConnectionState.Ok("hermes-agent", "0.18.0"),
@@ -182,6 +182,9 @@ class ScreenshotTests {
             clock = "09:41", tabs = tabs, appVersion = "0.1",
             onEvent = {}, onRevealRequested = {}, onExport = {},
             onOpenThreads = {},
+            serverUrlState = rememberTextFieldState("https://api.gent.ino.ink"),
+            // production seeds this from settings; default agent name is "juno"
+            agentNameState = rememberTextFieldState("juno"),
         )
     }
 

@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -35,6 +37,7 @@ fun NewThreadScreen(
     connState: ConnState,
     onEvent: (NewThreadEvent) -> Unit,
     onCancel: () -> Unit,
+    textState: TextFieldState = rememberTextFieldState(),
 ) {
     ScreenFrame(
         statusRow = { StatusRow(clock, connState) },
@@ -63,7 +66,7 @@ fun NewThreadScreen(
                     .hairlineBorder(LemanColors.accent)
                     .padding(14.dp),
             ) {
-                if (state.text.isEmpty()) {
+                if (textState.text.isEmpty()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("> ", style = LemanType.bodyLarge, color = LemanColors.accent)
                         Text(
@@ -75,8 +78,7 @@ fun NewThreadScreen(
                     }
                 }
                 BasicTextField(
-                    value = state.text,
-                    onValueChange = { onEvent(NewThreadEvent.SetText(it)) },
+                    state = textState,
                     textStyle = LemanType.bodyLarge.copy(color = LemanColors.textPrimary),
                     cursorBrush = SolidColor(LemanColors.accent),
                     modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 112.dp),
@@ -87,7 +89,7 @@ fun NewThreadScreen(
                     label = "start thread ⏎",
                     onClick = { onEvent(NewThreadEvent.Start) },
                     kind = LemanButtonKind.Primary,
-                    enabled = state.canStart,
+                    enabled = textState.text.isNotBlank() && !state.starting,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }

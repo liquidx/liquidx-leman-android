@@ -1,5 +1,9 @@
 package net.liquidx.leman.ui.config
 
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.clearText
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
@@ -30,10 +34,8 @@ sealed interface TestConnectionState {
 }
 
 data class ConfigUiState(
-    val serverUrlInput: String = "",
     val urlError: String? = null,
     val apiKeyMasked: String? = null,       // null = no key stored
-    val apiKeyInput: String = "",
     val revealedKey: String? = null,
     val settings: Settings = Settings(),
     val connState: ConnState = ConnState.NotConfigured,
@@ -43,15 +45,12 @@ data class ConfigUiState(
 )
 
 sealed interface ConfigEvent {
-    data class SetServerUrlInput(val value: String) : ConfigEvent
     data object SaveServerUrl : ConfigEvent
     data object TestConnection : ConfigEvent
-    data class SetApiKeyInput(val value: String) : ConfigEvent
     data object SaveApiKey : ConfigEvent
     data object RevealKey : ConfigEvent
     data object HideKey : ConfigEvent
     data class SetBiometricUnlock(val enabled: Boolean) : ConfigEvent
-    data class SetAgentName(val name: String) : ConfigEvent
     data class SelectGlyph(val glyph: String) : ConfigEvent
     data class SetExpandTraces(val enabled: Boolean) : ConfigEvent
     data class SetShowToolArgs(val enabled: Boolean) : ConfigEvent
@@ -66,10 +65,19 @@ class ConfigViewModel(
     private val allowHttp: Boolean = false, // debug builds may target LAN gateways
 ) : ViewModel() {
 
-    private val urlInput = MutableStateFlow<String?>(null) // null = mirror settings
+    /**
+     * Field buffers, owned here so they survive navigation. The fields are the
+     * source of truth while editing — nothing writes text back into them per
+     * keystroke (an async round-trip resets the cursor); we only seed them once
+     * from DataStore and mirror agent-name edits out via [snapshotFlow].
+     */
+    val serverUrlState = TextFieldState()
+    val apiKeyState = TextFieldState()
+    val agentNameState = TextFieldState()
+
     private val urlError = MutableStateFlow<String?>(null)
+    private var erroredUrlText: String? = null // field text that produced urlError
     private val apiKeyMasked = MutableStateFlow<String?>(null)
-    private val apiKeyInput = MutableStateFlow("")
     private val revealedKey = MutableStateFlow<String?>(null)
     private val testResult = MutableStateFlow<TestConnectionState>(TestConnectionState.Idle)
     private val confirmClearArmed = MutableStateFlow(false)
@@ -77,32 +85,37 @@ class ConfigViewModel(
 
     init {
         viewModelScope.launch { refreshMask() }
+        viewModelScope.launch {
+            val stored = settingsStore.settings.first()
+            if (serverUrlState.text.isEmpty()) serverUrlState.setTextAndPlaceCursorAtEnd(stored.serverUrl)
+            if (agentNameState.text.isEmpty()) agentNameState.setTextAndPlaceCursorAtEnd(stored.agentName)
+            snapshotFlow { agentNameState.text.toString() }.collect { name ->
+                settingsStore.update { if (it.agentName == name) it else it.copy(agentName = name) }
+            }
+        }
+        viewModelScope.launch {
+            // Editing the url clears its validation error. Compared against the
+            // text that failed so a queued emission can't wipe a fresh error.
+            snapshotFlow { serverUrlState.text.toString() }.collect { text ->
+                if (erroredUrlText != null && text != erroredUrlText) {
+                    erroredUrlText = null
+                    urlError.value = null
+                }
+            }
+        }
     }
 
     val state: StateFlow<ConfigUiState> = combine(
         settingsStore.settings,
         connectionManager.state,
-        urlInput,
         urlError,
-        combine(apiKeyMasked, apiKeyInput, revealedKey) { m, i, r -> Triple(m, i, r) },
+        combine(apiKeyMasked, revealedKey) { m, r -> m to r },
         combine(testResult, confirmClearArmed) { t, c -> t to c },
-    ) { values ->
-        val settings = values[0] as Settings
-        val conn = values[1] as ConnState
-        val input = values[2] as String?
-        val error = values[3] as String?
-
-        @Suppress("UNCHECKED_CAST")
-        val key = values[4] as Triple<String?, String, String?>
-
-        @Suppress("UNCHECKED_CAST")
-        val misc = values[5] as Pair<TestConnectionState, Boolean>
+    ) { settings, conn, error, key, misc ->
         ConfigUiState(
-            serverUrlInput = input ?: settings.serverUrl,
             urlError = error,
             apiKeyMasked = key.first,
-            apiKeyInput = key.second,
-            revealedKey = key.third,
+            revealedKey = key.second,
             settings = settings,
             connState = conn,
             testResult = misc.first,
@@ -113,25 +126,19 @@ class ConfigViewModel(
 
     fun onEvent(event: ConfigEvent) {
         when (event) {
-            is ConfigEvent.SetServerUrlInput -> {
-                urlInput.value = event.value
-                urlError.value = null
-            }
             ConfigEvent.SaveServerUrl -> saveServerUrl()
             ConfigEvent.TestConnection -> testConnection()
-            is ConfigEvent.SetApiKeyInput -> apiKeyInput.value = event.value
             ConfigEvent.SaveApiKey -> viewModelScope.launch {
-                val value = apiKeyInput.value.trim()
+                val value = apiKeyState.text.toString().trim()
                 if (value.isEmpty()) return@launch
                 apiKeyStore.set(value)
-                apiKeyInput.value = ""
+                apiKeyState.clearText()
                 refreshMask()
                 connectionManager.reconfigure()
             }
             ConfigEvent.RevealKey -> viewModelScope.launch { revealedKey.value = apiKeyStore.get() }
             ConfigEvent.HideKey -> revealedKey.value = null
             is ConfigEvent.SetBiometricUnlock -> update { it.copy(biometricUnlock = event.enabled) }
-            is ConfigEvent.SetAgentName -> update { it.copy(agentName = event.name) }
             is ConfigEvent.SelectGlyph -> {
                 if (event.glyph in Settings.GLYPH_CHOICES) {
                     update { it.copy(agentGlyph = event.glyph) }
@@ -160,17 +167,21 @@ class ConfigViewModel(
 
     /** Local validation before save (spec 04 §5): scheme + host. */
     private fun saveServerUrl() {
-        val raw = (urlInput.value ?: return).trim()
+        val fieldText = serverUrlState.text.toString()
+        val raw = fieldText.trim()
         val uri = runCatching { java.net.URI(raw) }.getOrNull()
         val schemeOk = uri?.scheme == "https" || (allowHttp && uri?.scheme == "http")
         if (uri == null || !schemeOk || uri.host.isNullOrBlank()) {
+            erroredUrlText = fieldText
             urlError.value = if (allowHttp) "enter an http(s):// origin" else "enter an https:// origin"
             return
         }
+        erroredUrlText = null
         urlError.value = null
         viewModelScope.launch {
-            settingsStore.update { it.copy(serverUrl = raw.trimEnd('/')) }
-            urlInput.value = null
+            val normalized = raw.trimEnd('/')
+            settingsStore.update { it.copy(serverUrl = normalized) }
+            serverUrlState.setTextAndPlaceCursorAtEnd(normalized)
             connectionManager.reconfigure()
         }
     }

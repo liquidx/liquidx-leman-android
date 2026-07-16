@@ -7,9 +7,8 @@ import kotlinx.coroutines.test.runTest
 import net.liquidx.leman.domain.model.RunEvent
 import net.liquidx.leman.testutil.MainDispatcherRule
 import net.liquidx.leman.testutil.VmHarness
-import net.liquidx.leman.ui.threads.awaitUntil
+import net.liquidx.leman.testutil.type
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -23,18 +22,13 @@ class NewThreadViewModelTest {
     val mainRule = MainDispatcherRule()
 
     @Test
-    fun canStart_onlyWithNonBlankText() = runTest {
+    fun start_ignoresBlankText() = runTest {
         val h = VmHarness(this)
         val vm = NewThreadViewModel(h.repo, h.settingsStore)
-        vm.state.test {
-            assertFalse(awaitItem().canStart)
-            vm.onEvent(NewThreadEvent.SetText("   "))
-            advanceUntilIdle()
-            assertFalse(vm.state.value.canStart)
-            vm.onEvent(NewThreadEvent.SetText("plan lyon trip"))
-            assertTrue(awaitUntil { it.text == "plan lyon trip" }.canStart)
-            cancelAndIgnoreRemainingEvents()
-        }
+        vm.textState.type("   ")
+        vm.onEvent(NewThreadEvent.Start)
+        advanceUntilIdle()
+        assertTrue(h.repo.observeThreads().first().isEmpty())
         h.close()
     }
 
@@ -46,7 +40,7 @@ class NewThreadViewModelTest {
         )
         val vm = NewThreadViewModel(h.repo, h.settingsStore)
         vm.created.test {
-            vm.onEvent(NewThreadEvent.SetText("plan lyon trip"))
+            vm.textState.type("plan lyon trip")
             vm.onEvent(NewThreadEvent.Start)
             val id = awaitItem()
             advanceUntilIdle()
@@ -64,7 +58,7 @@ class NewThreadViewModelTest {
             listOf(RunEvent.MessageDelta("x", 1.0), RunEvent.RunCompleted("x", null, 2.0)),
         )
         val vm = NewThreadViewModel(h.repo, h.settingsStore)
-        vm.onEvent(NewThreadEvent.SetText("only once"))
+        vm.textState.type("only once")
         vm.onEvent(NewThreadEvent.Start)
         vm.onEvent(NewThreadEvent.Start)
         advanceUntilIdle()

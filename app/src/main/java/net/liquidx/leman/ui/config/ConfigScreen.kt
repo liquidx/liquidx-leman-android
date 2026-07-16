@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,6 +49,9 @@ fun ConfigScreen(
     onExport: () -> Unit,
     onOpenThreads: () -> Unit,
     onSelectTab: (LemanTab) -> Unit = {},
+    serverUrlState: TextFieldState = rememberTextFieldState(),
+    apiKeyState: TextFieldState = rememberTextFieldState(),
+    agentNameState: TextFieldState = rememberTextFieldState(),
 ) {
     ScreenFrame(
         statusRow = { StatusRow(clock, state.connState) },
@@ -81,8 +86,7 @@ fun ConfigScreen(
             FieldLabel("hermes agent url")
             Box(Modifier.padding(horizontal = 18.dp)) {
                 PromptField(
-                    value = state.serverUrlInput,
-                    onValueChange = { onEvent(ConfigEvent.SetServerUrlInput(it)) },
+                    state = serverUrlState,
                     placeholder = Settings.DEFAULT_SERVER_URL,
                     hint = "⏎ save",
                     onSubmit = { onEvent(ConfigEvent.SaveServerUrl) },
@@ -131,8 +135,7 @@ fun ConfigScreen(
             }
             Box(Modifier.padding(horizontal = 18.dp, vertical = 4.dp)) {
                 PromptField(
-                    value = state.apiKeyInput,
-                    onValueChange = { onEvent(ConfigEvent.SetApiKeyInput(it)) },
+                    state = apiKeyState,
                     placeholder = "paste api key",
                     hint = "⏎ save",
                     onSubmit = { onEvent(ConfigEvent.SaveApiKey) },
@@ -149,8 +152,7 @@ fun ConfigScreen(
             FieldLabel("agent name")
             Box(Modifier.padding(horizontal = 18.dp)) {
                 PromptField(
-                    value = state.settings.agentName,
-                    onValueChange = { onEvent(ConfigEvent.SetAgentName(it)) },
+                    state = agentNameState,
                     placeholder = Settings.DEFAULT_AGENT_NAME,
                 )
             }

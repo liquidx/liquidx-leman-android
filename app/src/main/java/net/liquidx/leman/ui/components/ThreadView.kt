@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -363,16 +365,14 @@ fun ThreadHeader(
 @Composable
 fun Composer(
     agentName: String,
-    value: String,
-    onValueChange: (String) -> Unit,
+    state: TextFieldState,
     onSend: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
     Box(modifier = modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 12.dp)) {
         PromptField(
-            value = value,
-            onValueChange = onValueChange,
+            state = state,
             placeholder = "message $agentName",
             hint = "⏎ send",
             enabled = enabled,
@@ -414,6 +414,6 @@ private fun ThreadViewPreview() {
         TurnGutterRow("22:03") {
             UserTurn("this send failed", viaButton = false, failed = true)
         }
-        Composer("juno", "", {}, {})
+        Composer("juno", rememberTextFieldState(), {})
     }
 }

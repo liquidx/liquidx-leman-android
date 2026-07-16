@@ -160,6 +160,7 @@ fun LemanNavHost(
                 connState = connState,
                 onEvent = vm::onEvent,
                 onCancel = { navController.popBackStack() },
+                textState = vm.textState,
             )
         }
 
@@ -199,6 +200,9 @@ fun LemanNavHost(
                 },
                 onOpenThreads = { navController.navigate(Routes.THREADS) { launchSingleTop = true } },
                 onSelectTab = { tab -> navController.navigate(tab.id) { launchSingleTop = true } },
+                serverUrlState = vm.serverUrlState,
+                apiKeyState = vm.apiKeyState,
+                agentNameState = vm.agentNameState,
             )
         }
 
