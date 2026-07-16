@@ -44,6 +44,7 @@ fun StatusRow(clock: String, connState: ConnState, modifier: Modifier = Modifier
         ConnState.Checking -> Triple(LemanColors.warn, "hermes · connecting…", false)
         is ConnState.Offline -> Triple(LemanColors.textFaint, "hermes · offline", false)
         is ConnState.Unauthorized -> Triple(LemanColors.danger, "hermes · auth failed", false)
+        is ConnState.Unsupported -> Triple(LemanColors.danger, "hermes · gateway lacks sessions api", false)
         ConnState.NotConfigured -> Triple(LemanColors.textFaint, "hermes · set up in config", false)
     }
     Row(

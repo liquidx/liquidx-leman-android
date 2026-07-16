@@ -68,11 +68,16 @@ class ConnectionManager(
         applyResult(client.health(), scheduleRetry = true)
     }
 
-    private fun applyResult(result: ApiResult<HealthDto>, scheduleRetry: Boolean) {
+    private suspend fun applyResult(result: ApiResult<HealthDto>, scheduleRetry: Boolean) {
         when (result) {
             is ApiResult.Ok -> {
                 backoff.reset()
-                _state.value = ConnState.Online(result.value.version)
+                val caps = client.capabilities()
+                _state.value = if (caps is ApiResult.Ok && caps.value.supportsSessions) {
+                    ConnState.Online(result.value.version)
+                } else {
+                    ConnState.Unsupported(result.value.version)
+                }
             }
             is ApiResult.Err -> when (val error = result.error) {
                 is ApiError.Auth -> _state.value = ConnState.Unauthorized(error)

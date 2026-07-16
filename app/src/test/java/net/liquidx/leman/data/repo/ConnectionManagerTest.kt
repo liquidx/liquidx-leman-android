@@ -12,6 +12,7 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import net.liquidx.leman.data.remote.CapabilitiesDto
 import net.liquidx.leman.domain.model.ApiError
 import net.liquidx.leman.domain.model.ApiResult
 import net.liquidx.leman.domain.model.ConnState
@@ -111,6 +112,30 @@ class ConnectionManagerTest {
         assertEquals(ConnState.Online("0.18.0"), cm.state.value)
         cm.onAuthFailure(401)
         assertTrue(cm.state.value is ConnState.Unauthorized)
+        scope.cancel()
+    }
+
+    @Test
+    fun healthyGateway_withoutSessionsApi_isUnsupported() = runTest {
+        val scope = managerScope()
+        val client = FakeHermesClient()
+        client.capabilitiesResult = ApiResult.Ok(CapabilitiesDto()) // no flags
+        val cm = manager(scope, client)
+        cm.reconfigure()
+        advanceUntilIdle()
+        assertTrue(cm.state.value is ConnState.Unsupported)
+        scope.cancel()
+    }
+
+    @Test
+    fun capabilities404_oldGateway_isUnsupported() = runTest {
+        val scope = managerScope()
+        val client = FakeHermesClient()
+        client.capabilitiesResult = ApiResult.Err(ApiError.Client(404, "no capabilities"))
+        val cm = manager(scope, client)
+        cm.reconfigure()
+        advanceUntilIdle()
+        assertTrue(cm.state.value is ConnState.Unsupported)
         scope.cancel()
     }
 }

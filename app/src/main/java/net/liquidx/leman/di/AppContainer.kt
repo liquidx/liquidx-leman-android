@@ -11,6 +11,7 @@ import net.liquidx.leman.data.local.LemanDatabase
 import net.liquidx.leman.data.remote.HermesClient
 import net.liquidx.leman.data.remote.OkHttpHermesClient
 import net.liquidx.leman.data.repo.ConnectionManager
+import net.liquidx.leman.data.repo.SyncScheduler
 import net.liquidx.leman.data.repo.ThreadRepository
 import net.liquidx.leman.data.settings.ApiKeyStore
 import net.liquidx.leman.data.settings.KeystoreApiKeyStore
@@ -84,6 +85,14 @@ class AppContainer(
             client = hermesClient,
             scope = appScope,
             onAuthFailure = { code -> connectionManager.onAuthFailure(code) },
+        )
+    }
+
+    val syncScheduler: SyncScheduler by lazy {
+        SyncScheduler(
+            syncNow = { threadRepository.syncNow() },
+            connState = connectionManager.state,
+            scope = appScope,
         )
     }
 
