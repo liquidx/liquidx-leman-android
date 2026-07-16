@@ -109,4 +109,42 @@ class TraceComposerTest {
         )!!
         assertEquals("trace · 1 step · a.b · 42s", trace.rollupText())
     }
+
+    @Test
+    fun reasoningDeltas_mergeIntoOneStep_flushedByToolBoundary() {
+        val trace = composeTrace(
+            listOf(
+                RunEvent.ReasoningDelta("plan", 1.0),
+                RunEvent.ReasoningDelta(" steps", 1.1),
+                RunEvent.ToolStarted("web", "q", 2.0),
+                RunEvent.ToolCompleted("web", 0.0, false, 5.5),
+                RunEvent.ReasoningDelta("wrap up", 6.0),
+            ),
+        )!!
+        assertEquals(3, trace.steps.size)
+        assertEquals("plan steps", trace.steps[0].summary)
+        assertEquals("wrap up", trace.steps[2].summary)
+    }
+
+    @Test
+    fun toolDuration_derivedFromTimestamps_whenWireDurationAbsent() {
+        val trace = composeTrace(
+            listOf(
+                RunEvent.ToolStarted("web", null, 2.0),
+                RunEvent.ToolCompleted("web", 0.0, false, 5.5),
+            ),
+        )!!
+        assertEquals(3.5, trace.steps.single().durationSeconds, 1e-6)
+    }
+
+    @Test
+    fun explicitWireDuration_stillWins() {
+        val trace = composeTrace(
+            listOf(
+                RunEvent.ToolStarted("ci.logs", null, 2.0),
+                RunEvent.ToolCompleted("ci.logs", 24.0, false, 3.0),
+            ),
+        )!!
+        assertEquals(24.0, trace.steps.single().durationSeconds, 1e-6)
+    }
 }

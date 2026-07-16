@@ -12,23 +12,42 @@ import net.liquidx.leman.domain.model.TraceStepKind
  */
 fun composeTrace(events: List<RunEvent>): Trace? {
     val steps = mutableListOf<TraceStep>()
-    val pendingByTool = mutableMapOf<String, ArrayDeque<Int>>()
+    val pendingByTool = mutableMapOf<String, ArrayDeque<Pair<Int, Double>>>()
+    val reasoningBuffer = StringBuilder()
+
+    fun flushReasoning() {
+        val text = reasoningBuffer.toString().trim()
+        if (text.isNotEmpty()) steps += TraceStep(TraceStepKind.Reasoning, summary = text)
+        reasoningBuffer.clear()
+    }
 
     for (event in events) {
         when (event) {
-            is RunEvent.Reasoning ->
+            is RunEvent.ReasoningDelta -> reasoningBuffer.append(event.delta)
+
+            is RunEvent.Reasoning -> {
+                flushReasoning()
                 steps += TraceStep(TraceStepKind.Reasoning, summary = event.text)
+            }
 
             is RunEvent.ToolStarted -> {
+                flushReasoning()
                 steps += TraceStep(TraceStepKind.Tool, tool = event.tool, summary = event.preview)
-                pendingByTool.getOrPut(event.tool) { ArrayDeque() }.addLast(steps.lastIndex)
+                pendingByTool.getOrPut(event.tool) { ArrayDeque() }
+                    .addLast(steps.lastIndex to event.timestamp)
             }
 
             is RunEvent.ToolCompleted -> {
-                val index = pendingByTool[event.tool]?.removeFirstOrNull()
-                if (index != null) {
+                flushReasoning()
+                val pending = pendingByTool[event.tool]?.removeFirstOrNull()
+                // chat frames carry no duration; fall back to the started→completed gap
+                fun durationOf(startedAt: Double): Double =
+                    if (event.duration > 0.0) event.duration
+                    else (event.timestamp - startedAt).coerceAtLeast(0.0)
+                if (pending != null) {
+                    val (index, startedAt) = pending
                     steps[index] = steps[index].copy(
-                        durationSeconds = event.duration,
+                        durationSeconds = durationOf(startedAt),
                         error = event.error,
                     )
                 } else {
@@ -41,9 +60,10 @@ fun composeTrace(events: List<RunEvent>): Trace? {
                 }
             }
 
-            else -> Unit // deltas/completion/unknown are not trace material
+            else -> Unit // deltas/started/completion/unknown are not trace material
         }
     }
+    flushReasoning()
     return if (steps.isEmpty()) null else Trace(steps)
 }
 
