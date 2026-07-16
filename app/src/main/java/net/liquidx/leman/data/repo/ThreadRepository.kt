@@ -433,11 +433,6 @@ class ThreadRepository(
         _streaming.update { it - threadId }
     }
 
-    private fun String.snippet(max: Int): String {
-        val firstLine = lineSequence().firstOrNull()?.trim().orEmpty()
-        return if (firstLine.length <= max) firstLine else firstLine.take(max - 1) + "…"
-    }
-
     private companion object {
         const val MAX_POLL_FAILURES = 5
     }
