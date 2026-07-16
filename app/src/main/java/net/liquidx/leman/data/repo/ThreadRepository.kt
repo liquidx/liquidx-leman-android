@@ -139,21 +139,32 @@ class ThreadRepository(
         launchChat(threadId, turnId, text)
     }
 
+    /**
+     * dedup key: [TurnEntity.runId], not message content (spec §3).
+     *
+     * `runId` is only ever set from the `run.started` event in [chatTurn], which
+     * only fires once Hermes has accepted *this exact* turn. So `runId != null`
+     * means the server unambiguously has this message; `runId == null` means it
+     * never got there and must be resent.
+     *
+     * Content equality against `sessionMessages(...)` was the old dedup key, but
+     * it produces false positives whenever the user's new message text matches
+     * an earlier message they sent (e.g. resending "ok" after a prior, already
+     * answered "ok"): the retry would match the *old* server message, skip the
+     * resend, and the new message would be silently dropped.
+     */
     suspend fun retryTurn(turnId: String) {
         val turn = turnDao.getTurn(turnId) ?: return
         if (turn.kind != "user") return
-        turnDao.upsertTurn(turn.copy(sendState = "sending"))
         threadDao.getThread(turn.threadId)?.let {
             threadDao.upsertThread(it.copy(state = "running", lastActiveAt = clock()))
         }
-        // dedup: if the server already has this message, don't send it twice (spec §3)
-        val onServer = (client.sessionMessages(turn.threadId) as? ApiResult.Ok)
-            ?.value?.any { it.role == "user" && it.content == turn.markdown } == true
-        if (onServer) {
-            turnDao.getTurn(turnId)?.let { turnDao.upsertTurn(it.copy(sendState = "synced")) }
+        if (turn.runId != null) {
+            turnDao.upsertTurn(turn.copy(sendState = "synced"))
             activeRuns[turn.threadId]?.cancel()
             activeRuns[turn.threadId] = scope.launch { recoverByPolling(turn.threadId, turnId) }
         } else {
+            turnDao.upsertTurn(turn.copy(sendState = "sending"))
             launchChat(turn.threadId, turnId, turn.markdown.orEmpty())
         }
     }

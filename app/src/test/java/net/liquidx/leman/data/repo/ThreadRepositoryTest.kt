@@ -333,10 +333,13 @@ class ThreadRepositoryTest {
     }
 
     @Test
-    fun retryTurn_messageAlreadyOnServer_pollsInsteadOfResending() = runTest {
+    fun retryTurn_hasRunId_pollsInsteadOfResending() = runTest {
+        // runId is only ever persisted once the server ack'd this exact turn via
+        // run.started (see chatTurn's RunStarted branch), so a failed turn that
+        // already carries one must recover by polling rather than resend.
         val repo = repo()
         seedThread("s1", state = "failed")
-        seedUserTurn("t1", "s1", "already sent", sendState = "failed")
+        seedUserTurn("t1", "s1", "already sent", sendState = "failed", runId = "r1")
         client.messagesBySession["s1"] = ApiResult.Ok(
             listOf(
                 SessionMessageDto(1, "user", "already sent", timestamp = 1.0),
@@ -349,6 +352,41 @@ class ThreadRepositoryTest {
 
         assertEquals(0, client.chatCalls.size) // no duplicate send
         assertEquals(ThreadState.Idle, repo.observeThreads().first().single().state)
+        // recoverByPolling rebuilds local turns from the polled session messages
+        assertEquals(
+            "already answered",
+            repo.observeTurns("s1").first().last { it.kind == TurnKind.Agent }.markdown,
+        )
+    }
+
+    @Test
+    fun retryTurn_noRunId_resendsEvenWithDuplicateContentOnServer() = runTest {
+        // Regression: an earlier identical "ok" was already sent and answered, but the
+        // *new* "ok" failed before the server ever ack'd it (runId == null). Content-based
+        // dedup would wrongly match the OLD server message and silently drop the retry;
+        // the runId-based check must resend it instead.
+        val repo = repo()
+        seedThread("s1", state = "failed")
+        seedUserTurn("t0", "s1", "ok", sendState = "synced", runId = "r0", seq = 1)
+        seedUserTurn("t1", "s1", "ok", sendState = "failed", runId = null, seq = 2)
+        client.messagesBySession["s1"] = ApiResult.Ok(
+            listOf(
+                SessionMessageDto(1, "user", "ok", timestamp = 1.0),
+                SessionMessageDto(2, "assistant", "already answered", timestamp = 2.0, finishReason = "stop"),
+            ),
+        )
+        client.chatScripts.add(
+            listOf(RunEvent.RunStarted("r2", 1.0), RunEvent.RunCompleted("resent ok", null, 2.0)),
+        )
+
+        repo.retryTurn("t1")
+        advanceUntilIdle()
+
+        assertEquals(1, client.chatCalls.size)
+        assertEquals(
+            SendState.Synced,
+            repo.observeTurns("s1").first().first { it.id == "t1" }.sendState,
+        )
     }
 
     @Test
