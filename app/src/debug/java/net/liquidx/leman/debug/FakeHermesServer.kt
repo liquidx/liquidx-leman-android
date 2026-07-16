@@ -221,6 +221,9 @@ fun RunEvent.eventName(): String = when (this) {
     is RunEvent.ToolStarted -> "tool.started"
     is RunEvent.ToolCompleted -> "tool.completed"
     is RunEvent.RunCompleted -> "run.completed"
+    is RunEvent.RunStarted -> "run.started"
+    is RunEvent.ReasoningDelta -> "reasoning.delta"
+    is RunEvent.AssistantCompleted -> "assistant.completed"
     is RunEvent.Unknown -> "unknown"
 }
 
@@ -230,5 +233,8 @@ fun RunEvent.payloadPreview(): String = when (this) {
     is RunEvent.ToolStarted -> "$tool · ${preview.orEmpty().take(60)}"
     is RunEvent.ToolCompleted -> "$tool · ${"%.1f".format(duration)}s${if (error) " · error" else ""}"
     is RunEvent.RunCompleted -> "output ${output.length} chars"
+    is RunEvent.RunStarted -> runId
+    is RunEvent.ReasoningDelta -> delta.take(80)
+    is RunEvent.AssistantCompleted -> content.take(80)
     is RunEvent.Unknown -> raw.take(80)
 }

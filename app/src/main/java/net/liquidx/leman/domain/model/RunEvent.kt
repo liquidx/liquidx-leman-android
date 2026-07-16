@@ -31,5 +31,18 @@ sealed interface RunEvent {
         override val timestamp: Double,
     ) : RunEvent
 
+    /** Sessions chat stream: server accepted the message; carries the run id. */
+    data class RunStarted(val runId: String, override val timestamp: Double) : RunEvent
+
+    /** Sessions chat stream: incremental reasoning text (`tool.progress` on `_thinking`). */
+    data class ReasoningDelta(val delta: String, override val timestamp: Double) : RunEvent
+
+    /** Sessions chat stream: assistant message finished (may precede run.completed). */
+    data class AssistantCompleted(
+        val content: String,
+        val interrupted: Boolean,
+        override val timestamp: Double,
+    ) : RunEvent
+
     data class Unknown(val raw: String, override val timestamp: Double = 0.0) : RunEvent
 }
