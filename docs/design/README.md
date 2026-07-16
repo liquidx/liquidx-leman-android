@@ -114,7 +114,7 @@ Sections (section-label pattern; 30px between sections, controls at 16px rhythm)
 2. **AUTH** — `api key` field, value masked `hm_••••••••••••3kf2` in `#7A7A84` +.14em, `reveal` action in accent right. Toggle row `unlock with biometrics` (on). Caption: `key stored in secure enclave · never synced`. Toggle spec: 40×20 square, on = accent border + tint + 16px accent knob right with glow; off = `.18` hairline border + `#54545E` knob left.
 3. **AGENT IDENTITY** — header right: `default profile` faint. `agent name` text input (`juno`, blinking caret). `avatar` picker: five 38×38 square tiles with glyphs `✳ ◆ ▲ ● ⌬`; selected = accent border + `rgba(107,160,216,.12)` fill + accent glyph; unselected = `.12` hairline + `#54545E` glyph. Single-select. Caption: `shown in thread headers & turn labels · threads with their own profile override this`. **Note: no autonomy/spend/notify controls — those are per-thread, not global (screen not yet designed).**
 4. **DISPLAY** — toggles: `expand traces by default` (off), `show tool args in traces` (on). These drive 2b's trace rendering.
-5. **DATA** — `export threads` neutral button + `clear all threads` danger button (`#D06A6A` text, `rgba(208,106,106,.4)` border).
+5. **DATA** — `export threads` neutral button + `clear local cache` danger button (`#D06A6A` text, `rgba(208,106,106,.4)` border). Wipes the local cache only — the server is the system of record, so the list repopulates on the next sync (spec 03).
 
 ## Interactions & Behavior
 

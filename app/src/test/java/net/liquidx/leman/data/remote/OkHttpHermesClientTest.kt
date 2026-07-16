@@ -47,48 +47,6 @@ class OkHttpHermesClientTest {
     }
 
     @Test
-    fun startRun_postsHistoryAndReturnsRunId() = runTest {
-        server.enqueue(MockResponse().setResponseCode(202).setBody(Fixtures.load("wire/run-accepted.json")))
-        val result = client.startRun(
-            messages = listOf(WireMessage("user", "hello"), WireMessage("assistant", "hi"), WireMessage("user", "fix ci")),
-            sessionId = "sess_91",
-        )
-        assertEquals("run_7f3a", result.getOrNull()?.runId)
-        val request = server.takeRequest()
-        assertEquals("/v1/runs", request.path)
-        val body = request.body.readUtf8()
-        assertTrue(body.contains(""""model":"hermes-agent""""))
-        assertTrue(body.contains(""""session_id":"sess_91""""))
-        assertTrue(body.indexOf("hello") < body.indexOf("fix ci"))
-    }
-
-    @Test
-    fun getRun_returnsRunDto() = runTest {
-        server.enqueue(MockResponse().setBody(Fixtures.load("wire/run-completed.json")))
-        val result = client.getRun("run_7f3a")
-        assertEquals(RunStatus.Completed, result.getOrNull()?.runStatus)
-        assertEquals("/v1/runs/run_7f3a", server.takeRequest().path)
-    }
-
-    @Test
-    fun runEvents_streamsFixtureFramesAsEvents() = runTest {
-        server.enqueue(
-            MockResponse()
-                .setHeader("Content-Type", "text/event-stream")
-                .setBody(Fixtures.load("wire/events-stream.txt")),
-        )
-        val events = client.runEvents("run_7f3a").toList()
-        assertEquals(10, events.size)
-        assertTrue(events[0] is RunEvent.Reasoning)
-        assertTrue(events[3] is RunEvent.MessageDelta)
-        assertTrue(events[7] is RunEvent.Unknown)
-        assertTrue(events[8] is RunEvent.Unknown)
-        val completed = events.last() as RunEvent.RunCompleted
-        assertEquals("the pipeline is fixed.", completed.output)
-        assertEquals("/v1/runs/run_7f3a/events", server.takeRequest().path)
-    }
-
-    @Test
     fun errorMapping_401_isAuth() = runTest {
         server.enqueue(
             MockResponse().setResponseCode(401)
@@ -101,11 +59,11 @@ class OkHttpHermesClientTest {
     fun errorMapping_404_isClientWithMessage() = runTest {
         server.enqueue(
             MockResponse().setResponseCode(404)
-                .setBody("""{"error":{"message":"run not found","type":"invalid_request_error","code":"run_not_found"}}"""),
+                .setBody("""{"error":{"message":"session not found","type":"invalid_request_error","code":"session_not_found"}}"""),
         )
-        val error = client.getRun("nope").errorOrNull() as ApiError.Client
+        val error = client.sessionMessages("nope").errorOrNull() as ApiError.Client
         assertEquals(404, error.code)
-        assertEquals("run not found", error.message)
+        assertEquals("session not found", error.message)
     }
 
     @Test
@@ -136,7 +94,7 @@ class OkHttpHermesClientTest {
     fun notConfigured_returnsNotConfiguredWithoutTouchingNetwork() = runTest {
         val fresh = OkHttpHermesClient(userAgent = "t")
         assertEquals(ApiError.NotConfigured, fresh.health().errorOrNull())
-        assertEquals(ApiError.NotConfigured, fresh.getRun("x").errorOrNull())
+        assertEquals(ApiError.NotConfigured, fresh.sessionMessages("x").errorOrNull())
         fresh.shutdown()
     }
 

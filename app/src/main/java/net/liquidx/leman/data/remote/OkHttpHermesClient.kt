@@ -104,46 +104,6 @@ class OkHttpHermesClient(
                 ?: emptyList()
         }
 
-    override suspend fun startRun(
-        messages: List<WireMessage>,
-        sessionId: String?,
-    ): ApiResult<RunAcceptedDto> {
-        val t = transport ?: return ApiResult.Err(ApiError.NotConfigured)
-        val body = HermesJson.encodeToString(
-            RunRequestDto.serializer(),
-            RunRequestDto(
-                model = net.liquidx.leman.domain.model.Settings.MODEL_ID,
-                input = messages,
-                sessionId = sessionId,
-            ),
-        )
-        return execute(t.rest, t.request("v1/runs").post(body.toRequestBody(jsonMediaType)).build()) {
-            HermesJson.decodeFromString(RunAcceptedDto.serializer(), it)
-        }
-    }
-
-    override suspend fun getRun(id: String): ApiResult<RunDto> =
-        get("v1/runs/$id", RunDto.serializer()) { it.rest }
-
-    override fun runEvents(id: String): Flow<RunEvent> = flow {
-        val t = transport ?: throw HermesStreamException(ApiError.NotConfigured)
-        val request = t.request("v1/runs/$id/events", accept = "text/event-stream").build()
-        val response = try {
-            t.stream.newCall(request).execute()
-        } catch (e: Exception) {
-            throw HermesStreamException(mapException(e))
-        }
-        response.use { resp ->
-            if (!resp.isSuccessful) throw HermesStreamException(mapHttpFailure(resp))
-            val source = resp.body?.source() ?: throw HermesStreamException(ApiError.Protocol("empty stream body"))
-            try {
-                for (frame in readSseDataFrames(source)) emit(parseRunEvent(frame))
-            } catch (e: java.io.IOException) {
-                throw HermesStreamException(mapException(e))
-            }
-        }
-    }.flowOn(Dispatchers.IO)
-
     override suspend fun capabilities(): ApiResult<CapabilitiesDto> =
         get("v1/capabilities", CapabilitiesDto.serializer()) { it.rest }
 

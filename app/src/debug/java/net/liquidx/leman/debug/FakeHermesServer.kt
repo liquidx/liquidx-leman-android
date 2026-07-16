@@ -14,12 +14,9 @@ import net.liquidx.leman.data.remote.CapabilitiesDto
 import net.liquidx.leman.data.remote.HealthDto
 import net.liquidx.leman.data.remote.HermesClient
 import net.liquidx.leman.data.remote.HermesStreamException
-import net.liquidx.leman.data.remote.RunAcceptedDto
-import net.liquidx.leman.data.remote.RunDto
 import net.liquidx.leman.data.remote.SessionDto
 import net.liquidx.leman.data.remote.SessionListDto
 import net.liquidx.leman.data.remote.SessionMessageDto
-import net.liquidx.leman.data.remote.WireMessage
 import net.liquidx.leman.domain.model.ApiError
 import net.liquidx.leman.domain.model.ApiResult
 import net.liquidx.leman.domain.model.RunEvent
@@ -36,23 +33,7 @@ class FakeHermesServer : HermesClient {
 
     val scenario = MutableStateFlow(FakeScenario.Demo)
 
-    private data class FakeRun(
-        val id: String,
-        val scenario: FakeScenario,
-        val startedAt: Long,
-        val events: List<RunEvent>,
-        val output: String,
-        val streamOpens: AtomicInteger = AtomicInteger(0),
-    ) {
-        /** Streaming scenario "runs" for its scripted duration; others complete instantly. */
-        fun completed(now: Long): Boolean = when (scenario) {
-            FakeScenario.Streaming -> now - startedAt > events.size * STREAM_DELAY_MS
-            FakeScenario.Hostile -> streamOpens.get() >= 2
-            else -> true
-        }
-    }
-
-    private val runs = ConcurrentHashMap<String, FakeRun>()
+    /** Shared id namespace for synthetic run ids surfaced on [RunEvent.RunStarted]. */
     private val counter = AtomicInteger(0)
 
     /** Mutable holder so seed + chat traffic can update a session's dto/messages in place. */
@@ -143,68 +124,6 @@ class FakeHermesServer : HermesClient {
         ApiResult.Ok(HealthDto("ok", "hermes-agent (fake)", "0.18.0-fake"))
 
     override suspend fun models(): ApiResult<List<String>> = ApiResult.Ok(listOf("hermes-agent"))
-
-    override suspend fun startRun(
-        messages: List<WireMessage>,
-        sessionId: String?,
-    ): ApiResult<RunAcceptedDto> {
-        val id = "fake-run-${counter.incrementAndGet()}"
-        val userText = messages.lastOrNull()?.content.orEmpty()
-        val current = scenario.value
-        runs[id] = FakeRun(
-            id = id,
-            scenario = current,
-            startedAt = System.currentTimeMillis(),
-            events = scriptFor(current, userText),
-            output = outputFor(current, userText),
-        )
-        return ApiResult.Ok(RunAcceptedDto(id, "started"))
-    }
-
-    override suspend fun getRun(id: String): ApiResult<RunDto> {
-        val run = runs[id] ?: return ApiResult.Err(ApiError.Client(404, "run not found"))
-        val done = run.completed(System.currentTimeMillis())
-        return ApiResult.Ok(
-            RunDto(
-                objectType = "hermes.run",
-                runId = run.id,
-                status = if (done) "completed" else "running",
-                sessionId = run.id,
-                model = "hermes-agent",
-                createdAt = run.startedAt / 1000.0,
-                updatedAt = System.currentTimeMillis() / 1000.0,
-                lastEvent = null,
-                output = if (done) run.output else null,
-                usage = null,
-            ),
-        )
-    }
-
-    override fun runEvents(id: String): Flow<RunEvent> = flow {
-        val run = runs[id] ?: throw HermesStreamException(ApiError.Client(404, "run not found"))
-        val opens = run.streamOpens.incrementAndGet()
-        when (run.scenario) {
-            FakeScenario.Streaming -> {
-                // replays from the beginning, like the real gateway (spec 02)
-                for (event in run.events) {
-                    emit(event)
-                    delay(STREAM_DELAY_MS)
-                }
-            }
-            FakeScenario.Hostile -> {
-                if (opens == 1) {
-                    // drop mid-run before completion → exercises the poll backstop
-                    for (event in run.events.take(run.events.size / 2)) {
-                        emit(event)
-                        delay(STREAM_DELAY_MS / 2)
-                    }
-                    throw HermesStreamException(ApiError.Network(IOException("hostile drop")))
-                }
-                for (event in run.events) emit(event)
-            }
-            else -> for (event in run.events) emit(event)
-        }
-    }
 
     override fun reconfigure(baseUrl: String?, apiKey: String?) = Unit
 
@@ -381,21 +300,6 @@ class SwitchableHermesClient(
 
     override suspend fun health() = active.health()
     override suspend fun models() = active.models()
-    override suspend fun startRun(messages: List<WireMessage>, sessionId: String?) =
-        active.startRun(messages, sessionId)
-
-    override suspend fun getRun(id: String) = active.getRun(id)
-
-    override fun runEvents(id: String): Flow<RunEvent> = flow {
-        var count = 0
-        active.runEvents(id).collect { event ->
-            bus.logEvent(event.eventName(), event.timestamp, event.payloadPreview())
-            if (chaos.flags.value.dropStream && ++count >= 5) {
-                throw HermesStreamException(ApiError.Network(IOException("chaos stream drop")))
-            }
-            emit(event)
-        }
-    }
 
     override fun reconfigure(baseUrl: String?, apiKey: String?) = real.reconfigure(baseUrl, apiKey)
 

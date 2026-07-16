@@ -36,7 +36,7 @@ class DaoInstrumentedTest {
         db.threadDao().upsertThread(
             ThreadEntity(
                 id = "a", title = "t", preview = "p", state = "idle", pinned = false,
-                unread = false, createdAt = 1, lastActiveAt = 2, sessionId = null,
+                unread = false, createdAt = 1, lastActiveAt = 2, source = "api_server",
                 agentName = null, agentGlyph = null,
             ),
         )

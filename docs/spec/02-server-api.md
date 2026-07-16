@@ -1,16 +1,20 @@
-# 02 — Server API: connection, streaming, updates
+# 02 — Server API: connection, sessions, streaming
 
 ## Status of this contract — VERIFIED
 
-This contract was probed live against the running gateway on 2026-07-15 (gateway
+This contract was probed live against the running gateway on 2026-07-17 (gateway
 `version 0.18.0`, model id `hermes-agent`) and reflects what the server actually does, not
 an assumption. Everything wire-specific still lives in `data/remote` so a future gateway
 change touches one package: DTOs, `HermesClient`, and the DTO→domain mappers.
 
-The single most important finding: **the gateway has no server-side thread/conversation
-store.** It is a stateless *agent-run runner*. There is no thread list, no global event
-feed, and no server-side pins/read/history. The **app is the system of record** for
-threads — which is why Room is primary storage, not a cache (03).
+The single most important finding — and a reversal of the original design — is that **the
+gateway does have a server-side session store.** It exposes a **Sessions API** under
+`/api/sessions/*` (note the `/api` prefix, not `/v1`) that persists every session and its
+full message history, regardless of which client created it: the dashboard, a cron job, the
+CLI, or this app. That makes the **gateway the system of record for threads**; the app's
+Room database is a cache rebuilt from it (03). The older `/v1/runs` run-runner API this
+contract used to describe is gone from the app — the app sends exclusively through the
+Sessions chat endpoints below.
 
 ### Base URL & host
 
@@ -31,189 +35,218 @@ threads — which is why Room is primary storage, not a cache (03).
 
 ## Transport
 
-- OkHttp singleton, HTTP/2, gzip. Timeouts: connect 10s, read 30s (REST) / none (run
-  event stream), write 15s. Agent runs can take minutes, so the **run is async** (below)
-  rather than a long-held request — the socket that matters is the event stream.
+- OkHttp singleton, HTTP/2, gzip. Timeouts: connect 10s, read 30s (REST) / none (chat
+  stream), write 15s. Agent turns can take minutes, so the chat stream's socket is the one
+  that matters — everything else is a short REST call.
 - Base URL and API key come from settings; changing either tears down and rebuilds the
   client (`ConnectionManager.reconfigure()`).
-- Headers: `Accept: application/json` (REST) / `text/event-stream` (events),
+- Headers: `Accept: application/json` (REST) / `text/event-stream` (chat stream),
   `Content-Type: application/json`, `User-Agent: leman-android/<versionName>`.
 - Cleartext HTTP is allowed **only** in debug builds (mock server / LAN gateways) via a
   debug-only network security config; the real gateway is TLS.
+
+## Capabilities gate
+
+`GET /v1/capabilities` returns feature flags plus an endpoint map. The app requires both
+`session_resources` and `session_chat_streaming` to be true before treating the gateway as
+usable:
+
+```kotlin
+@Serializable data class CapabilitiesDto(
+    val version: String? = null,
+    val features: Map<String, JsonElement> = emptyMap(),
+) {
+    val supportsSessions: Boolean   // both flags true
+}
+```
+
+Checked right after a successful `GET /v1/health` probe, as part of `ConnectionManager`'s
+state machine (below). A gateway that answers health but lacks the Sessions API surfaces an
+explicit `ConnState.Unsupported(version)` — "gateway does not support sessions" — rather than
+the app silently breaking against endpoints that don't exist.
 
 ## Endpoints (verified)
 
 | Method & path | Status | Purpose |
 |---|---|---|
 | `GET /v1/health` | 200 | connectivity probe + version banner (2d "test connection"). Returns `{ status, platform, version }` |
-| `GET /v1/models` | 200 | model list; `data[].id` = `hermes-agent`. Used to validate a connection and populate the agent model |
-| `POST /v1/runs` | 202 | **start an async agent run** (the core call). Body `{ model, input, session_id? }` → `{ run_id, status:"started" }` |
-| `GET /v1/runs/{id}` | 200 | poll run status/result. Returns the `hermes.run` object |
-| `GET /v1/runs/{id}/events` | 200 | **SSE event stream** for a run: streaming text, reasoning, tool steps, completion. Live while running; **replays full history for a finished run** |
-| `POST /v1/chat/completions` | 200 | standard OpenAI chat (stream + non-stream). Available as a fallback / simple path; not used for the primary agent UX |
-| `POST /v1/responses` | 200 | OpenAI Responses API (`output[]`, `store`). Not used by the app; noted for completeness |
+| `GET /v1/models` | 200 | model list; `data[].id` = `hermes-agent` |
+| `GET /v1/capabilities` | 200 | feature flags gating the Sessions API (above) |
+| `GET /api/sessions` | 200 | paginated session list — see below |
+| `GET /api/sessions/{id}/messages` | 200 | full message history for one session, **including original user prompts** |
+| `POST /api/sessions` | 200 | create a session, `{}` body → `{"object":"hermes.session","session":{…}}` (nested under `session`) |
+| `PATCH /api/sessions/{id}` | 200 | update `title` / `end_reason` |
+| `DELETE /api/sessions/{id}` | 200 | `{"object":"hermes.session.deleted","id":…,"deleted":true}` |
+| `POST /api/sessions/{id}/chat` | 200 | synchronous chat turn (not used by the app — streaming is) |
+| `POST /api/sessions/{id}/chat/stream` | 200 | **the send path** — SSE chat turn, named events (below) |
 
-Confirmed **absent** (all 404, or 405 for list): `GET /v1/runs` (no list), `/v1/threads*`,
-`/v1/events`, `/openapi.json`, `/docs`. The app must not depend on any of these.
+Nonexistent session on any `/api/sessions/{id}/*` path → 404 envelope
+`{"error":{…,"code":"session_not_found"}}`.
 
-### `input` carries the conversation — history is client-managed
+### Session list and history
 
-`POST /v1/runs` accepts `input` as **either** a plain string **or a messages array**
-`[{ role, content }]`. Passing the full prior conversation as the array is how the agent
-"remembers" — verified: a run given `[user, assistant, user]` correctly answered a
-question about the first user message.
-
-`session_id` (echoed back on every run, defaults to the run's own id) **groups** runs but
-does **not** auto-replay history into model context — verified: a follow-up run that
-passed only `session_id` (and not the history) did *not* recall an earlier fact. So:
-
-> To advance a thread, the app POSTs a run with `input =` the thread's full turn history
-> (mapped to `{role,content}`) plus the new user message. `session_id` is retained for
-> correlation/telemetry, not relied on for memory.
-
-### Wire models (DTOs)
+`GET /api/sessions?limit&offset&source&include_children` →
+`{"object":"list","data":[…],"limit","offset","has_more"}`. Each session:
 
 ```kotlin
-@Serializable data class HealthDto(         // GET /v1/health
-    val status: String,                     // "ok"
-    val platform: String,                   // "hermes-agent"
-    val version: String,                    // "0.18.0"
-)
-
-@Serializable data class RunAcceptedDto(    // POST /v1/runs (202)
-    @SerialName("run_id") val runId: String,
-    val status: String,                     // "started"
-)
-
-@Serializable data class RunDto(            // GET /v1/runs/{id}
-    val `object`: String,                   // "hermes.run"
-    @SerialName("run_id") val runId: String,
-    val status: String,                     // started | running | completed | failed
-    @SerialName("session_id") val sessionId: String,
-    val model: String,
-    @SerialName("created_at") val createdAt: Double,   // float epoch seconds
-    @SerialName("updated_at") val updatedAt: Double,
-    @SerialName("last_event") val lastEvent: String? = null,
-    val output: String? = null,             // present when completed
-    val usage: UsageDto? = null,
-)
-
-@Serializable data class UsageDto(
-    @SerialName("input_tokens")  val inputTokens: Int,
-    @SerialName("output_tokens") val outputTokens: Int,
-    @SerialName("total_tokens")  val totalTokens: Int,
+@Serializable data class SessionDto(
+    val id: String,
+    val source: String = "api_server",        // api_server | cron | cli | …
+    val model: String? = null,
+    val title: String? = null,                // nullable — falls back to preview (03)
+    val preview: String? = null,
+    @SerialName("started_at") val startedAt: Double = 0.0,     // float epoch seconds
+    @SerialName("ended_at") val endedAt: Double? = null,
+    @SerialName("last_active") val lastActive: Double = 0.0,
+    @SerialName("message_count") val messageCount: Int = 0,
 )
 ```
 
-`Json { ignoreUnknownKeys = true }` everywhere; unknown `status`/event strings map to an
-explicit `Unknown` domain value rather than crashing — the gateway evolves independently.
+New session ids look like `api_<epoch>_<hex>`. Sessions created implicitly by other
+clients keep whatever id that client minted (e.g. `run_<hex>` from a legacy caller).
 
-## Run events (SSE) — the streaming + trace source
-
-`GET /v1/runs/{id}/events` is a `text/event-stream`. Framing note: the server sends
-**`data:`-only frames** — there are **no `id:`, `event:`, or `retry:` lines**; the event
-*type* is a field *inside* each JSON payload. Parse each `data:` line as JSON and switch on
-`.event`. The stream ends with a `: stream closed` comment.
-
-```
-data: {"event":"message.delta",       "run_id":…, "timestamp":…, "delta":"2"}
-data: {"event":"reasoning.available",  "run_id":…, "timestamp":…, "text":"…summary…"}
-data: {"event":"tool.started",         "run_id":…, "timestamp":…, "tool":"web_search", "preview":"query text"}
-data: {"event":"tool.completed",       "run_id":…, "timestamp":…, "tool":"web_search", "duration":5.939, "error":false}
-data: {"event":"run.completed",        "run_id":…, "timestamp":…, "output":"…final text…", "usage":{…}}
-: stream closed
-```
+`GET /api/sessions/{id}/messages` returns every message the gateway holds for that
+session, oldest first:
 
 ```kotlin
-@Serializable sealed interface RunEvent {          // custom decoder keyed on "event"
+@Serializable data class SessionMessageDto(
+    val id: Long,
+    val role: String,                          // user | assistant | tool
+    val content: String? = null,
+    @SerialName("tool_calls") val toolCalls: List<ToolCallDto>? = null,   // OpenAI-style function calls
+    @SerialName("tool_name") val toolName: String? = null,
+    val reasoning: String? = null,
+    val timestamp: Double = 0.0,
+    @SerialName("finish_reason") val finishReason: String? = null,
+)
+```
+
+## Chat — the send path
+
+`POST /api/sessions/{id}/chat/stream` with body `{"message": "…"}` is how every user
+message reaches the agent. It replaces the old async run-and-poll flow entirely: no
+separate "start" call returning an id to poll, no client-assembled history — the server
+already has the full conversation for `id`, and **replays it into model context on this
+call** (verified: a fact from turn 1 is recalled in turn 2 without the client resending
+anything). This is strictly better than the old `session_id`-on-a-run behavior, which did
+*not* auto-replay history — one more reason the migration is a full one, not a fallback.
+
+The stream is standard-ish SSE with **named events** — `event:` line + `data:` line pairs,
+a monotonic `seq`, and every frame carrying `session_id`/`run_id`/`ts`:
+
+```
+event: run.started
+data: {"run_id":"run_abc","user_message":{…},"session_id":"s1","seq":1,"ts":1.0}
+
+event: tool.started
+data: {"tool_name":"web_search","preview":"query text","session_id":"s1","seq":2,"ts":2.0}
+
+event: tool.progress
+data: {"tool_name":"_thinking","delta":"…reasoning chunk…","session_id":"s1","seq":3,"ts":2.4}
+
+event: tool.completed
+data: {"tool_name":"web_search","session_id":"s1","seq":4,"ts":5.9}
+
+event: assistant.delta
+data: {"delta":"par","message_id":"m1","session_id":"s1","seq":5,"ts":6.0}
+
+event: assistant.completed
+data: {"content":"…final text…","completed":true,"partial":false,"interrupted":false,"seq":6,"ts":7.0}
+
+event: run.completed
+data: {"messages":[…full turn incl. tool_calls, reasoning…],"usage":{…},"seq":7,"ts":7.1}
+
+event: done
+data: {}
+```
+
+- `run.started` — server accepted the message; carries the server-assigned `run_id`, kept
+  on the user turn for correlation and retry dedup (03).
+- `message.started` — an assistant message id was allocated.
+- `tool.started` / `tool.progress` / `tool.completed` — the reasoning stream rides inside
+  this vocabulary: `tool.progress` on the pseudo-tool `_thinking` carries an incremental
+  reasoning `delta`; real tools carry `preview`/`args` on start, no duration/error on
+  completion (unlike the old run-runner events — the composer derives duration from
+  timestamps instead).
+- `assistant.delta` — appends to the streaming agent turn's markdown.
+- `assistant.completed` — the assistant message finished (may precede `run.completed`);
+  carries `interrupted` for a dropped/cancelled turn.
+- `run.completed` — the full turn as persisted server-side: `messages[]` (including tool
+  calls and reasoning) + `usage`. This is what gets finalized into Room immediately, without
+  waiting for the next sync tick (03).
+- `done` — stream end marker.
+
+```kotlin
+sealed interface RunEvent {
     val timestamp: Double
-    @Serializable data class MessageDelta(val delta: String, override val timestamp: Double) : RunEvent
-    @Serializable data class Reasoning(val text: String, override val timestamp: Double) : RunEvent
-    @Serializable data class ToolStarted(val tool: String, val preview: String?, override val timestamp: Double) : RunEvent
-    @Serializable data class ToolCompleted(val tool: String, val duration: Double, val error: Boolean, override val timestamp: Double) : RunEvent
-    @Serializable data class RunCompleted(val output: String, val usage: UsageDto?, override val timestamp: Double) : RunEvent
+    data class MessageDelta(val delta: String, override val timestamp: Double) : RunEvent
+    data class Reasoning(val text: String, override val timestamp: Double) : RunEvent
+    data class ToolStarted(val tool: String, val preview: String?, override val timestamp: Double) : RunEvent
+    data class ToolCompleted(val tool: String, val duration: Double, val error: Boolean, override val timestamp: Double) : RunEvent
+    data class RunCompleted(val output: String, val usage: TokenUsage?, override val timestamp: Double) : RunEvent
+    data class RunStarted(val runId: String, override val timestamp: Double) : RunEvent
+    data class ReasoningDelta(val delta: String, override val timestamp: Double) : RunEvent
+    data class AssistantCompleted(val content: String, val interrupted: Boolean, override val timestamp: Double) : RunEvent
     data class Unknown(val raw: String, override val timestamp: Double = 0.0) : RunEvent
 }
 ```
 
+`readSseFrames(source)` parses the `event:`/`data:` pairing (a blank line resets the
+pending event name so a dangling `event:` never leaks onto a later frame);
+`parseChatEvent(frame)` decodes one frame into a `RunEvent`. Malformed or unrecognized
+frames become `RunEvent.Unknown` rather than killing the stream — the gateway evolves
+independently.
+
 ### How events map to the UI
 
-- **`message.delta`** — appends to the streaming agent turn's markdown (05 streaming
-  rules). This is the visible answer text.
-- **`reasoning.available`** — the agent's thinking summary. Rendered as (or folded into)
-  the **trace** turn, muted + collapsed by default (design requirement).
-- **`tool.started` / `tool.completed`** — a matched pair per tool call = one **trace
-  step**: tool name, `preview` (the args/query summary, gated by `show_tool_args`),
-  `duration` seconds, and `error`. These build the trace table and the rollup
-  (`▸ trace · N steps · web_search ×k · Xm Ys`) — 05.
-- **`run.completed`** — authoritative final `output` + `usage`. Replaces the accumulated
-  streaming text and is what gets persisted as the agent turn. Marks the thread idle/done.
-- **`error: true`** on `tool.completed`, or a `status:"failed"` run, surfaces per 04.
+Unchanged from the original design (05 owns the rendering rules): deltas append to the
+streaming agent turn, reasoning renders as (or folds into) the muted collapsed **trace**
+turn, matched tool start/complete pairs become trace steps, and `run.completed` supplies
+the authoritative final content that gets persisted.
 
-## Run lifecycle & the ConnectionManager
+## Mutations
 
-There is no persistent app-wide socket (no global feed). "Connection" means *can we reach
-the gateway and is a run in flight*. The status row reflects a lightweight health state
-plus any active run.
+- `PATCH /api/sessions/{id}` `{"title": "…"}` — rename, propagated from the app's local
+  rename action (03 §4).
+- `DELETE /api/sessions/{id}` — delete, propagated from the app's local delete action.
+- Pin and read/unread state have no server equivalent and stay purely local (03).
+
+## `ConnectionManager` and capabilities
 
 ```kotlin
 sealed interface ConnState {
-    data object NotConfigured : ConnState             // no url/key yet
-    data object Checking : ConnState                  // health probe in flight
-    data class Online(val version: String) : ConnState   // GET /v1/health ok → "hermes 0.18.0"
-    data class Offline(val error: ApiError) : ConnState  // health/network failure
-    data class Unauthorized(val error: ApiError) : ConnState  // 401
+    data object NotConfigured : ConnState
+    data object Checking : ConnState
+    data class Online(val version: String) : ConnState        // health ok + capabilities support sessions
+    data class Unsupported(val version: String) : ConnState    // health ok, gateway too old for sessions
+    data class Offline(val error: ApiError) : ConnState
+    data class Unauthorized(val error: ApiError) : ConnState
 }
 class ConnectionManager { val state: StateFlow<ConnState>; fun reconfigure(); suspend fun probe(): ApiResult<HealthDto> }
 ```
 
-- On app start / reconfigure: `probe()` → `GET /v1/health`. Success = `Online(version)`
-  and drives `▪ hermes · 0.18.0` / `connected` in the status row and the 2d caption.
+- On app start / reconfigure: `probe()` → `GET /v1/health`, then (on success)
+  `GET /v1/capabilities`. Both flags on → `Online(version)`, drives `▪ hermes · 0.18.0` /
+  `connected` in the status row. Health ok but capabilities missing → `Unsupported(version)`.
 - Health probe has a 5s timeout so the status row settles fast (04).
+- A `401` anywhere (chat stream included) poisons the whole app to `Unauthorized`.
 
-### Running a thread turn
+## Recovery — no resumable stream
 
-`RunController` (in `data/repo`, per thread) drives one run:
-
-1. `POST /v1/runs` with `input =` mapped history + new message → `run_id`.
-2. Open `GET /v1/runs/{id}/events` as a cold `Flow<RunEvent>` (`okhttp-sse` or a raw
-   buffered read of `data:` lines — the server's non-standard framing means a hand-rolled
-   line reader is simplest and is unit-tested against fixtures).
-3. Fold events into the in-memory streaming turn + live trace (05).
-4. On `run.completed` (or stream close), persist the finalized agent turn + trace to Room,
-   clear the streaming state, set thread state idle.
-5. Also poll `GET /v1/runs/{id}` as a **backstop** if the event stream drops before
-   `run.completed` — the run may finish server-side while the socket is gone; the poll
-   recovers `output`/`usage` and the run status.
-
-### Reconnect (no Last-Event-ID)
-
-Because the stream carries no `id:` offsets, a dropped stream **cannot resume mid-position**.
-Recovery is:
-
-- **If the run may still be running:** re-`GET /v1/runs/{id}` for status. If still
-  running, re-open `/events`. **The re-opened stream replays from the beginning** (verified
-  on finished runs), so the client **resets the accumulated streaming text and rebuilds**
-  from the replay rather than appending — deltas are idempotent only if you reset first.
-- **If the run finished:** `GET /v1/runs/{id}` returns the full `output`; persist directly,
-  skip the stream. `/events` on a finished run also still replays the whole trace, which is
-  how a **cold-loaded thread lazily fetches an old run's trace** on demand.
-- Backoff between reconnect attempts: 1s, 2s, 4s… cap 30s, ±20% jitter; reset on success.
-  While reconnecting, status row shows an amber `connecting…` dot; the thread keeps its
-  accumulated text visible (04).
-- No 60s heartbeat watchdog is needed — the server sends no keepalive comments; liveness is
-  the poll backstop plus the socket's own read behavior. A run that produces no events for
-  an extended period is checked via `GET /v1/runs/{id}` rather than assumed dead.
+A `POST … /chat/stream` response cannot be re-attached like a GET-based SSE connection with
+`Last-Event-ID`. If the socket dies mid-turn (process death, dropped connection), recovery
+is by **polling `GET /api/sessions/{id}/messages`** with backoff until an assistant message
+newer than the pending user turn appears, or the poll budget is exhausted → the turn fails
+with a `retry` affordance (03 §3, §4).
 
 ## Update strategy summary
 
 | Data | How it stays fresh |
 |------|--------------------|
-| Thread **list** | purely local (Room) — there is no server list to sync. Threads are created and mutated on-device |
-| Open thread, **live run** | `POST /v1/runs` → `/events` stream; `GET /v1/runs/{id}` poll backstop |
-| Old run's **trace** | lazily `GET /v1/runs/{id}/events` (replays) when the user expands a persisted trace that wasn't fully stored |
-| Connection **health** | `GET /v1/health` on start/reconfigure + before a send; manual "test connection" (2d) |
+| Thread **list** | `SessionSyncer` pages `GET /api/sessions` on foreground, every 30s while foregrounded, and after each own send completes (03 §2) |
+| Thread **history** | `GET /api/sessions/{id}/messages`, rebuilt wholesale into Room turns when a session's `last_active`/`message_count` changed |
+| Open thread, **live send** | `POST /api/sessions/{id}/chat/stream`; poll-by-messages backstop on drop |
+| Connection **health** | `GET /v1/health` + `GET /v1/capabilities` on start/reconfigure; manual "test connection" (2d) |
 
-There is deliberately **no polling of a thread list and no global SSE** — earlier drafts
-assumed both; the live gateway provides neither, and the app doesn't need them because it
-owns the thread list itself.
+There is no global SSE / server push — sync is pull-based on the cadence above, which is
+enough for a foreground-first app (01).

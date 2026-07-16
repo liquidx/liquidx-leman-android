@@ -121,15 +121,21 @@ class LemanE2eTest {
         compose.onAllNodes(hasSetTextAction()).assertCountEquals(0)
     }
 
+    /**
+     * Sends through the sessions send path (`createSession` → `chat/stream`):
+     * SampleCorpus-seeded threads aren't known sessions on the fake, so the
+     * first message must go through "new thread", which mints a real fake
+     * session id before sending (spec 03).
+     */
     @Test
     fun e2e_sendMessage_streamsAndPersistsAgentTurnAndTrace() {
         launch()
-        compose.onNodeWithText("plan lyon trip").performClick()
+        compose.onNodeWithText("new thread").performClick()
         compose.waitUntil(5_000) {
-            compose.onAllNodesWithText("message juno").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().isNotEmpty()
         }
         compose.onAllNodes(hasSetTextAction())[0].performTextInput("book something nice")
-        compose.onAllNodes(hasSetTextAction())[0].performImeAction()
+        compose.onNodeWithText("start thread ⏎").performClick()
 
         // fake demo scenario: reasoning + tool events + delta + run.completed
         compose.waitUntil(10_000) {

@@ -11,15 +11,6 @@ import net.liquidx.leman.domain.model.RunEvent
 interface HermesClient {
     suspend fun health(): ApiResult<HealthDto>
     suspend fun models(): ApiResult<List<String>>
-    suspend fun startRun(messages: List<WireMessage>, sessionId: String?): ApiResult<RunAcceptedDto>
-    suspend fun getRun(id: String): ApiResult<RunDto>
-
-    /**
-     * Cold flow of a run's events. Completes normally when the server closes the
-     * stream; fails with [HermesStreamException] carrying the mapped [net.liquidx.leman.domain.model.ApiError]
-     * when the socket dies — callers own reconnect policy (spec 02).
-     */
-    fun runEvents(id: String): Flow<RunEvent>
 
     /** Tear down and rebuild transport when base URL or key changes (spec 02). */
     fun reconfigure(baseUrl: String?, apiKey: String?)
@@ -32,8 +23,11 @@ interface HermesClient {
     suspend fun deleteSession(id: String): ApiResult<Unit>
 
     /**
-     * Cold flow of a Sessions chat run's events (spec 02 §Sessions). Same
-     * completion/failure contract as [runEvents].
+     * Cold flow of a Sessions chat run's events (spec 02 §Sessions). Completes
+     * normally when the server closes the stream; fails with
+     * [HermesStreamException] carrying the mapped
+     * [net.liquidx.leman.domain.model.ApiError] when the socket dies — callers
+     * own reconnect policy (spec 02).
      */
     fun chatStream(id: String, message: String): Flow<RunEvent>
 }
