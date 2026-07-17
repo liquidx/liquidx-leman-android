@@ -42,6 +42,11 @@ class AppContainer(
         val db: LemanDatabase? = null,
         val apiKeyStore: ApiKeyStore? = null,
         val debugHooks: DebugHooks? = null,
+        // DataStore requires a process-wide singleton per file. Instrumented tests run
+        // in the live app process alongside LemanApp's container, and each test builds
+        // its own container — so tests inject an isolated, per-test SettingsStore here
+        // rather than colliding on the production settings file.
+        val settings: SettingsStore? = null,
     )
 
     private val appContext = context.applicationContext
@@ -52,7 +57,7 @@ class AppContainer(
         overrides.debugHooks ?: if (BuildConfig.DEBUG) loadDebugHooks() else null
     }
 
-    val settings: SettingsStore by lazy { SettingsStore(appContext, appScope) }
+    val settings: SettingsStore by lazy { overrides.settings ?: SettingsStore(appContext, appScope) }
 
     val apiKeyStore: ApiKeyStore by lazy {
         overrides.apiKeyStore ?: KeystoreApiKeyStore(appContext, appScope)

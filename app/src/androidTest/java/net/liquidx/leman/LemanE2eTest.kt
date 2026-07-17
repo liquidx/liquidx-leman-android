@@ -12,14 +12,19 @@ import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import java.io.File
+import java.util.UUID
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import net.liquidx.leman.data.local.LemanDatabase
 import net.liquidx.leman.data.settings.ApiKeyStore
+import net.liquidx.leman.data.settings.SettingsStore
 import net.liquidx.leman.debug.FakeHermesServer
 import net.liquidx.leman.debug.SampleCorpus
 import net.liquidx.leman.di.AppContainer
 import net.liquidx.leman.ui.nav.LemanNavHost
 import net.liquidx.leman.ui.theme.LemanTheme
+import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -46,6 +51,11 @@ class LemanE2eTest {
     private lateinit var container: AppContainer
     private lateinit var fake: FakeHermesServer
 
+    // Owns the injected SettingsStore's DataStore; cancelled in tearDown so the
+    // file registration is released before the next test builds its own store.
+    private val testSettingsScope =
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+
     private fun launch(withApiKey: Boolean = true) {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         fake = FakeHermesServer()
@@ -56,6 +66,15 @@ class LemanE2eTest {
                 hermesClient = fake,
                 db = db,
                 apiKeyStore = InMemoryKeyStore(if (withApiKey) "test-key" else null),
+                // Isolate settings per test: this runs in the live app process next to
+                // LemanApp's own container, and DataStore forbids two instances active on
+                // one file. A unique temp file per test keeps them from colliding.
+                settings = SettingsStore(
+                    scope = testSettingsScope,
+                    produceFile = {
+                        File(context.cacheDir, "e2e-settings-${UUID.randomUUID()}.preferences_pb")
+                    },
+                ),
             ),
         )
         runBlocking { SampleCorpus.seed(db) }
@@ -67,6 +86,14 @@ class LemanE2eTest {
 
     @Before
     fun setUp() = Unit
+
+    @After
+    fun tearDown() {
+        // Release this test's DataStore + coroutines so the next test in the same
+        // process starts clean (DataStore is a process-wide singleton per file).
+        if (::container.isInitialized) container.appScope.cancel()
+        testSettingsScope.cancel()
+    }
 
     @Test
     fun coldStart_rendersSeededListFromLocalStore() {
