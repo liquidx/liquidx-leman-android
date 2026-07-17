@@ -89,7 +89,12 @@ object ScreenshotFixtures {
         loaded = true,
     )
 
-    /** A cron preamble ahead of the normal conversation (ux-fixes spec 06/2b). */
+    /**
+     * A cron preamble ahead of a short conversation head (ux-fixes spec 06/2b).
+     * Deliberately fits on one screen: the thread view opens scrolled to the
+     * bottom, and a full ci log would push the collapsed system line —
+     * the thing this fixture showcases — above the fold.
+     */
     fun systemTurns(): List<Turn> = listOf(
         Turn(
             id = "system-turn",
@@ -104,7 +109,7 @@ object ScreenshotFixtures {
             sendState = SendState.Synced,
             viaButton = false,
         ),
-    ) + ciTurns()
+    ) + ciTurns().take(2)
 
     fun failedSendTurns(): List<Turn> = ciTurns() + Turn(
         id = "failed-turn",

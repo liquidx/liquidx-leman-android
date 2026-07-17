@@ -2,6 +2,8 @@ package net.liquidx.leman
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -9,6 +11,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTextInput
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
@@ -17,6 +20,8 @@ import java.util.UUID
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import net.liquidx.leman.data.local.LemanDatabase
+import net.liquidx.leman.data.local.ThreadEntity
+import net.liquidx.leman.data.local.TurnEntity
 import net.liquidx.leman.data.settings.ApiKeyStore
 import net.liquidx.leman.data.settings.SettingsStore
 import net.liquidx.leman.debug.FakeHermesServer
@@ -25,6 +30,7 @@ import net.liquidx.leman.di.AppContainer
 import net.liquidx.leman.ui.nav.LemanNavHost
 import net.liquidx.leman.ui.theme.LemanTheme
 import org.junit.After
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -56,7 +62,10 @@ class LemanE2eTest {
     private val testSettingsScope =
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
 
-    private fun launch(withApiKey: Boolean = true) {
+    private fun launch(
+        withApiKey: Boolean = true,
+        seedExtra: suspend (LemanDatabase) -> Unit = {},
+    ) {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         fake = FakeHermesServer()
         val db = Room.inMemoryDatabaseBuilder(context, LemanDatabase::class.java).build()
@@ -77,7 +86,10 @@ class LemanE2eTest {
                 ),
             ),
         )
-        runBlocking { SampleCorpus.seed(db) }
+        runBlocking {
+            SampleCorpus.seed(db)
+            seedExtra(db)
+        }
         compose.setContent {
             LemanTheme { LemanNavHost(container) }
         }
@@ -146,6 +158,82 @@ class LemanE2eTest {
         }
         // a disabled BasicTextField exposes no SetText action
         compose.onAllNodes(hasSetTextAction()).assertCountEquals(0)
+    }
+
+    /**
+     * Seeds a 40-turn thread (alternating user/agent, one short line each)
+     * directly into the local store — long enough that "anchored at the first
+     * unread turn", "at the top", and "at the bottom" are visibly distinct
+     * viewport states. `lastReadAt` = createdAt of [readUpToTurn] (1-based),
+     * so turn `readUpToTurn + 1` is the first unread.
+     */
+    private suspend fun seedLongThread(db: LemanDatabase, unread: Boolean, readUpToTurn: Int) {
+        val now = System.currentTimeMillis()
+        val base = now - 2 * 3_600_000L
+        fun turnAt(i: Int) = base + i * 60_000L
+        db.threadDao().upsertThread(
+            ThreadEntity(
+                id = "th-long", title = "long scroll thread", preview = "turn message 40",
+                state = "idle", pinned = false, unread = unread,
+                createdAt = base, lastActiveAt = now, source = "api_server",
+                agentName = null, agentGlyph = null,
+                lastReadAt = turnAt(readUpToTurn),
+            ),
+        )
+        db.turnDao().upsertTurns(
+            (1..40).map { i ->
+                TurnEntity(
+                    id = "th-long-turn-$i", threadId = "th-long", seq = i.toLong(),
+                    kind = if (i % 2 == 1) "user" else "agent",
+                    createdAt = turnAt(i),
+                    markdown = "turn message %02d".format(i),
+                    blocksJson = null, traceJson = null, runId = null,
+                    sendState = "synced", viaButton = false,
+                )
+            },
+        )
+    }
+
+    @Test
+    fun unreadThread_opensAnchoredAtFirstUnreadTurn() {
+        launch(seedExtra = { db -> seedLongThread(db, unread = true, readUpToTurn = 15) })
+        compose.onNodeWithText("long scroll thread").performClick()
+        // The anchor scroll lands the first unread turn (16) at the top of the log.
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithText("turn message 16").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("turn message 16").assertIsDisplayed()
+        // Not at the top: already-read turns sit above the fold (uncomposed).
+        assertTrue(compose.onAllNodesWithText("turn message 01").fetchSemanticsNodes().isEmpty())
+        // Not at the bottom either: the newest turn is far below the fold.
+        assertTrue(compose.onAllNodesWithText("turn message 40").fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun scrolledUp_jumpToLatestAppears_tapReturnsToBottom() {
+        launch(seedExtra = { db -> seedLongThread(db, unread = false, readUpToTurn = 40) })
+        compose.onNodeWithText("long scroll thread").performClick()
+        // A read thread opens at the bottom; no jump control while there.
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithText("turn message 40").fetchSemanticsNodes().isNotEmpty()
+        }
+        assertTrue(compose.onAllNodesWithText("↓ latest").fetchSemanticsNodes().isEmpty())
+
+        // Scroll away from the bottom: the control appears.
+        compose.onAllNodes(hasScrollToIndexAction())[0].performScrollToIndex(0)
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithText("↓ latest").fetchSemanticsNodes().isNotEmpty()
+        }
+
+        // Tap it: the newest turn is back on screen and the control retires.
+        compose.onNodeWithText("↓ latest").performClick()
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithText("turn message 40").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("turn message 40").assertIsDisplayed()
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithText("↓ latest").fetchSemanticsNodes().isEmpty()
+        }
     }
 
     /**

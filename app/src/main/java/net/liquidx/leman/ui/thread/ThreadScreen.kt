@@ -21,10 +21,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import net.liquidx.leman.domain.model.SendState
 import net.liquidx.leman.domain.model.Turn
@@ -70,20 +73,22 @@ fun ThreadScreen(
     // First open lands on the first unread turn (if any); every subsequent
     // change follows the existing "stick to bottom if already there" rule.
     // Fires once per thread open — never refights the user's own scrolling
-    // (ux-fixes spec).
-    var didInitialScroll by remember(state.thread?.id) { mutableStateOf(false) }
+    // (ux-fixes spec). Saveable so a config change (rotation) doesn't re-run
+    // the anchor scroll and clobber the restored list position.
+    var didInitialScroll by rememberSaveable(state.thread?.id) { mutableStateOf(false) }
     LaunchedEffect(state.thread?.id, state.turns.size, state.streaming?.text?.length) {
-        val total = listState.layoutInfo.totalItemsCount
-        if (total == 0) return@LaunchedEffect
         if (!didInitialScroll) {
-            if (!state.loaded) return@LaunchedEffect
+            if (!state.loaded || state.turns.isEmpty()) return@LaunchedEffect
+            // layoutInfo lags composition by a frame: when the loaded state lands
+            // in one emission, totalItemsCount still reads 0 here. Suspend until
+            // the list has actually laid its items out, then anchor.
+            val total = snapshotFlow { listState.layoutInfo.totalItemsCount }.first { it > 0 }
+            listState.scrollToItem(state.initialScrollIndex?.coerceIn(0, total - 1) ?: (total - 1))
             didInitialScroll = true
-            val target = state.initialScrollIndex?.coerceIn(0, total - 1) ?: (total - 1)
-            listState.scrollToItem(target)
             return@LaunchedEffect
         }
-        if (atBottom) {
-            listState.scrollToItem(total - 1)
+        if (atBottom && listState.layoutInfo.totalItemsCount > 0) {
+            listState.scrollToItem(listState.layoutInfo.totalItemsCount - 1)
         }
     }
 
