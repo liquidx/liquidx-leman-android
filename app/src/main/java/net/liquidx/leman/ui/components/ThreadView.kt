@@ -269,6 +269,61 @@ fun TraceTable(
     }
 }
 
+/** `512` → `512`, `2140` → `2.1k` (system turn collapsed-line char count, ux-fixes). */
+private fun formatCharCount(count: Int): String =
+    if (count >= 1000) "%.1fk".format(count / 1000.0) else count.toString()
+
+/**
+ * System turn (ux-fixes spec): a framework-injected preamble (cron/skill
+ * boilerplate), not a human message — rendered COLLAPSED by default as one
+ * faint meta line, mirroring [TraceLine]'s expand/collapse affordance exactly.
+ * Expanded, the full body renders like an agent turn but tagged SYSTEM instead
+ * of YOU/agent-name — no blue user styling, no left accent border.
+ */
+@Composable
+fun SystemTurn(
+    markdown: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        TraceLine(
+            rollup = "system · ${formatCharCount(markdown.length)} chars",
+            expanded = expanded,
+            onToggle = onToggle,
+        )
+        AnimatedVisibility(visible = expanded, enter = LemanMotion.riseInFast) {
+            Column(modifier = Modifier.padding(top = 4.dp)) {
+                Text("SYSTEM", style = LemanType.turnTag, color = LemanColors.textFaint)
+                MarkdownBody(
+                    markdown,
+                    style = LemanMarkdown.agentTurn,
+                    modifier = Modifier.padding(top = 5.dp),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Jump-to-latest affordance (ux-fixes spec): a small floating, terminal-styled
+ * hairline box — no Material FAB — shown above the composer only while the
+ * user has scrolled away from the bottom of the log.
+ */
+@Composable
+fun JumpToLatestButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .background(LemanColors.surface)
+            .hairlineBorder(LemanColors.hairlineStrong)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+    ) {
+        Text("↓ latest", style = LemanType.meta, color = LemanColors.textSecondary)
+    }
+}
+
 /** Trace turn = line + expandable table with riseIn (spec 05/06). */
 @Composable
 fun TraceTurn(
@@ -393,6 +448,13 @@ private fun ThreadViewPreview() {
     )
     Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(vertical = 12.dp)) {
         ThreadHeader("fix flaky ci pipeline", "▪ DONE · juno · ops profile", "✳", pinned = true, onBack = {}, onTogglePin = {})
+        TurnGutterRow("21:39") {
+            SystemTurn(
+                "[IMPORTANT: You are running as a scheduled cron job. DELIVERY: post a summary to #ci-alerts.]",
+                expanded = false,
+                onToggle = {},
+            )
+        }
         TurnGutterRow("21:40") {
             UserTurn("the ci pipeline keeps flaking on the retry test — find it and fix it", viaButton = false, failed = false)
         }

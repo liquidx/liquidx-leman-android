@@ -54,7 +54,12 @@ class SessionSyncer(
                 is ApiResult.Ok -> result.value
             }
             val turns = sessionTurns(session.id, messages)
-            val lastMarkdown = turns.lastOrNull { it.markdown != null }?.markdown
+            // Skip trailing system turns (injected framework preambles, e.g. a
+            // cron/skill preamble with no reply yet) — they'd otherwise leak
+            // preamble text into the thread list preview (ux-fixes spec).
+            val lastMarkdown = turns.lastOrNull {
+                it.markdown != null && (it.kind == "user" || it.kind == "agent")
+            }?.markdown
             val firstUser = turns.firstOrNull { it.kind == "user" }?.markdown
             val rebuilt = ThreadEntity(
                 id = session.id,

@@ -341,6 +341,33 @@ class SessionSyncerTest {
     }
 
     @Test
+    fun trailingSystemTurn_skippedForPreview_prefersLastUserOrAgentMarkdown() = runTest {
+        // A cron run whose latest message is an injected framework preamble (no
+        // reply yet) must not leak that preamble text into the thread list
+        // preview — the preview should fall back to the last real agent turn.
+        client.listSessionsResults.add(
+            ApiResult.Ok(
+                SessionListDto(data = listOf(session("run_cron", 200.0, source = "cron")), hasMore = false),
+            ),
+        )
+        client.messagesBySession["run_cron"] = ApiResult.Ok(
+            listOf(
+                SessionMessageDto(1, "user", "morning digest please", timestamp = 100.0),
+                SessionMessageDto(2, "assistant", "sent the digest", timestamp = 110.0, finishReason = "stop"),
+                SessionMessageDto(
+                    3, "user",
+                    "[IMPORTANT: You are running as a scheduled cron job. DELIVERY: post to #digest.]",
+                    timestamp = 190.0,
+                ),
+            ),
+        )
+        assertTrue(syncer().syncOnce() is ApiResult.Ok)
+        val thread = db.threadDao().getThread("run_cron")!!
+        assertEquals("sent the digest", thread.preview)
+        assertEquals(listOf("user", "agent", "system"), db.turnDao().getTurns("run_cron").map { it.kind })
+    }
+
+    @Test
     fun listFailure_returnsErr_touchesNothing() = runTest {
         seedThread("run_x", lastActiveAt = 100_000)
         client.listSessionsResults.add(ApiResult.Err(ApiError.Network(IOException("down"))))

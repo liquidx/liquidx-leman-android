@@ -63,4 +63,28 @@ class LocalMappingTest {
         assertEquals(SendState.Synced, domain.sendState)
         assertEquals(entity, domain.toEntity())
     }
+
+    @Test
+    fun turnEntity_systemKind_roundTripsThroughDomain() {
+        val entity = TurnEntity(
+            id = "t1", threadId = "a", seq = 1, kind = "system", createdAt = 9,
+            markdown = "[IMPORTANT: cron preamble]", blocksJson = null,
+            traceJson = null, runId = null, sendState = "synced", viaButton = false,
+        )
+        val domain = entity.toDomain()
+        assertEquals(TurnKind.System, domain.kind)
+        assertEquals(entity, domain.toEntity())
+    }
+
+    @Test
+    fun threadEntity_lastReadAt_roundTripsThroughDomain() {
+        val entity = ThreadEntity(
+            id = "a", title = "t", preview = "p", state = "idle",
+            pinned = false, unread = false, createdAt = 1, lastActiveAt = 2,
+            source = "cron", agentName = null, agentGlyph = null, lastReadAt = 42,
+        )
+        val domain = entity.toDomain()
+        assertEquals(42L, domain.lastReadAt)
+        assertEquals(entity, domain.toEntity())
+    }
 }

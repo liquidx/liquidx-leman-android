@@ -8,6 +8,19 @@ import net.liquidx.leman.domain.model.TraceStep
 import net.liquidx.leman.domain.model.TraceStepKind
 
 /**
+ * Framework-injected preambles (cron/skill-invocation boilerplate) arrive as
+ * ordinary `role: "user"` messages — there is no API field distinguishing them
+ * from a human message, only this content convention (ux-fixes spec, verified
+ * against live sessions). Conservative: only these exact, case-sensitive
+ * prefixes count; anything else — including a user message that happens to
+ * start with "[link]" or other bracketed text — stays a real user turn.
+ */
+private val injectedPreamblePrefixes = listOf("[IMPORTANT:", "[System:")
+
+private fun isInjectedPreamble(content: String): Boolean =
+    injectedPreamblePrefixes.any { content.startsWith(it) }
+
+/**
  * Rebuilds a synced thread's turns from the server's message history (spec 03).
  * Deterministic ids (`msg-`/`trace-` + server message id) make the rebuild
  * idempotent. Tool results (`role: tool`) carry no timing, so trace steps map
@@ -39,7 +52,8 @@ fun sessionTurns(sessionId: String, messages: List<SessionMessageDto>): List<Tur
         when (m.role) {
             "user" -> {
                 if (m.content.isNullOrEmpty()) continue
-                turns += turn("msg-$sessionId-${m.id}", "user", createdAt, m.content)
+                val kind = if (isInjectedPreamble(m.content)) "system" else "user"
+                turns += turn("msg-$sessionId-${m.id}", kind, createdAt, m.content)
             }
             "assistant" -> {
                 m.reasoning?.takeIf { it.isNotBlank() }?.let {

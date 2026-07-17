@@ -59,6 +59,7 @@ fun TurnEntity.toDomain(): Turn = Turn(
     kind = when (kind) {
         "agent" -> TurnKind.Agent
         "trace" -> TurnKind.Trace
+        "system" -> TurnKind.System
         else -> TurnKind.User
     },
     createdAt = createdAt,
@@ -81,6 +82,7 @@ fun Turn.toEntity(): TurnEntity = TurnEntity(
         TurnKind.User -> "user"
         TurnKind.Agent -> "agent"
         TurnKind.Trace -> "trace"
+        TurnKind.System -> "system"
     },
     createdAt = createdAt,
     markdown = markdown,

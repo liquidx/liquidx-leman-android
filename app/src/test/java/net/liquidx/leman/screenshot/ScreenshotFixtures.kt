@@ -89,6 +89,23 @@ object ScreenshotFixtures {
         loaded = true,
     )
 
+    /** A cron preamble ahead of the normal conversation (ux-fixes spec 06/2b). */
+    fun systemTurns(): List<Turn> = listOf(
+        Turn(
+            id = "system-turn",
+            threadId = "th-ci",
+            seq = 0,
+            kind = TurnKind.System,
+            createdAt = now - 25 * 3_600_000L,
+            markdown = "[IMPORTANT: You are running as a scheduled cron job. " +
+                "DELIVERY: post a summary to #ci-alerts once done.]",
+            trace = null,
+            runId = null,
+            sendState = SendState.Synced,
+            viaButton = false,
+        ),
+    ) + ciTurns()
+
     fun failedSendTurns(): List<Turn> = ciTurns() + Turn(
         id = "failed-turn",
         threadId = "th-ci",

@@ -151,6 +151,14 @@ class ScreenshotTests {
     }
 
     @Test
+    fun thread_systemCollapsed() = snap("2b-thread-system") {
+        ThreadScreen(
+            state = ScreenshotFixtures.threadState(turns = ScreenshotFixtures.systemTurns()),
+            clock = "09:41", timestampOf = timestampOf, onEvent = {}, onBack = {},
+        )
+    }
+
+    @Test
     fun thread_failedSend() = snap("2b-thread-failed") {
         ThreadScreen(
             state = ScreenshotFixtures.threadState(turns = ScreenshotFixtures.failedSendTurns()),

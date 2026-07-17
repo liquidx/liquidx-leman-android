@@ -3,7 +3,7 @@ package net.liquidx.leman.domain.model
 /** Client-owned thread lifecycle (spec 03). */
 enum class ThreadState { Idle, Running, Failed }
 
-enum class TurnKind { User, Agent, Trace }
+enum class TurnKind { User, Agent, Trace, System }
 
 /** Send lifecycle for user turns (spec 03). */
 enum class SendState { Synced, Sending, Failed }

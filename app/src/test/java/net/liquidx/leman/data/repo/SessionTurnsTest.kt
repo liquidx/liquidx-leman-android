@@ -62,4 +62,41 @@ class SessionTurnsTest {
         val messages = listOf(msg(1, "user", "hi"), msg(2, "assistant", "yo", finish = "stop"))
         assertEquals(sessionTurns("s1", messages), sessionTurns("s1", messages))
     }
+
+    @Test
+    fun importantPrefixed_userMessage_mapsToSystemKind() {
+        val turns = sessionTurns(
+            "s1",
+            listOf(
+                msg(1, "user", "[IMPORTANT: You are running as a scheduled cron job. DELIVERY: ...]"),
+                msg(2, "assistant", "digest sent", finish = "stop"),
+            ),
+        )
+        assertEquals(listOf("system", "agent"), turns.map { it.kind })
+        assertEquals("msg-s1-1", turns[0].id) // id scheme unchanged by the kind switch
+        assertEquals("synced", turns[0].sendState)
+    }
+
+    @Test
+    fun systemPrefixed_userMessage_mapsToSystemKind() {
+        val turns = sessionTurns(
+            "s1",
+            listOf(
+                msg(1, "user", "[System: The previous response was cut off by a network error mid-stream.]"),
+            ),
+        )
+        assertEquals(listOf("system"), turns.map { it.kind })
+    }
+
+    @Test
+    fun bracketedButNotAPreamble_userMessage_staysUserKind() {
+        val turns = sessionTurns(
+            "s1",
+            listOf(
+                msg(1, "user", "[link] check this out"),
+                msg(2, "user", "plain text message", ts = 11.0),
+            ),
+        )
+        assertEquals(listOf("user", "user"), turns.map { it.kind })
+    }
 }
