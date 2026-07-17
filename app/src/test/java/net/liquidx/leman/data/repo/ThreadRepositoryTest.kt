@@ -673,6 +673,31 @@ class ThreadRepositoryTest {
     }
 
     @Test
+    fun markRead_setsLastReadAt_toLatestTurnCreatedAt() = runTest {
+        client.createSessionResult = ApiResult.Ok(SessionDto(id = "s1"))
+        client.chatScripts.add(
+            listOf(RunEvent.RunStarted("r1", 1.0), RunEvent.RunCompleted("answer", null, 2.0)),
+        )
+        val repo = repo()
+        repo.createThread("q")
+        advanceUntilIdle()
+        val latestTurnAt = repo.observeTurns("s1").first().maxOf { it.createdAt }
+
+        now += 60_000 // markRead must key off the turn's createdAt, not the clock
+        repo.markRead("s1")
+
+        assertEquals(latestTurnAt, repo.observeThreads().first().single().lastReadAt)
+    }
+
+    @Test
+    fun markRead_noTurns_fallsBackToClock() = runTest {
+        val repo = repo()
+        seedThread("s1", state = "idle")
+        repo.markRead("s1")
+        assertEquals(now, repo.observeThreads().first().single().lastReadAt)
+    }
+
+    @Test
     fun clearAll_wipesEverything() = runTest {
         client.createSessionResult = ApiResult.Ok(SessionDto(id = "s1"))
         client.chatScripts.add(

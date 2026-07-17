@@ -29,6 +29,8 @@ data class Thread(
     val source: String,
     val agentName: String?,
     val agentGlyph: String?,
+    /** High-water mark of read turns (ux-fixes spec): drives open-at-first-unread. */
+    val lastReadAt: Long = 0,
 ) {
     /** Per-thread identity override beats the global default (spec 03). */
     fun profileOr(default: AgentProfile): AgentProfile = AgentProfile(

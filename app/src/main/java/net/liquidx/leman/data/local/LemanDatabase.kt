@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 
 @Database(
     entities = [ThreadEntity::class, TurnEntity::class],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class LemanDatabase : RoomDatabase() {

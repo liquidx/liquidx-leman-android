@@ -18,16 +18,23 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import net.liquidx.leman.domain.model.SendState
 import net.liquidx.leman.domain.model.Turn
 import net.liquidx.leman.domain.model.TurnKind
 import net.liquidx.leman.domain.rollupText
 import net.liquidx.leman.ui.components.AgentTurn
 import net.liquidx.leman.ui.components.Composer
+import net.liquidx.leman.ui.components.JumpToLatestButton
 import net.liquidx.leman.ui.components.StatusRow
+import net.liquidx.leman.ui.components.SystemTurn
 import net.liquidx.leman.ui.components.ThreadHeader
 import net.liquidx.leman.ui.components.TraceTurn
 import net.liquidx.leman.ui.components.TurnGutterRow
@@ -49,8 +56,10 @@ fun ThreadScreen(
 ) {
     val composerState = rememberTextFieldState()
     val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
 
-    // Follow the bottom while streaming only if already there (spec 05).
+    // Follow the bottom while streaming only if already there (spec 05); also
+    // drives the jump-to-latest affordance's visibility (ux-fixes spec).
     val atBottom by remember {
         derivedStateOf {
             val info = listState.layoutInfo
@@ -58,9 +67,23 @@ fun ThreadScreen(
             last == null || last.index >= info.totalItemsCount - 1
         }
     }
-    LaunchedEffect(state.turns.size, state.streaming?.text?.length) {
-        if (atBottom && listState.layoutInfo.totalItemsCount > 0) {
-            listState.scrollToItem(listState.layoutInfo.totalItemsCount - 1)
+    // First open lands on the first unread turn (if any); every subsequent
+    // change follows the existing "stick to bottom if already there" rule.
+    // Fires once per thread open — never refights the user's own scrolling
+    // (ux-fixes spec).
+    var didInitialScroll by remember(state.thread?.id) { mutableStateOf(false) }
+    LaunchedEffect(state.thread?.id, state.turns.size, state.streaming?.text?.length) {
+        val total = listState.layoutInfo.totalItemsCount
+        if (total == 0) return@LaunchedEffect
+        if (!didInitialScroll) {
+            if (!state.loaded) return@LaunchedEffect
+            didInitialScroll = true
+            val target = state.initialScrollIndex?.coerceIn(0, total - 1) ?: (total - 1)
+            listState.scrollToItem(target)
+            return@LaunchedEffect
+        }
+        if (atBottom) {
+            listState.scrollToItem(total - 1)
         }
     }
 
@@ -80,93 +103,117 @@ fun ThreadScreen(
             onBack = onBack,
             onTogglePin = { onEvent(ThreadEvent.TogglePin) },
         )
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.weight(1f).padding(horizontal = 18.dp),
-        ) {
-            items(state.turns.size, key = { state.turns[it].id }) { index ->
-                val turn = state.turns[index]
-                Box(Modifier.padding(top = 16.dp)) {
-                    when (turn.kind) {
-                        TurnKind.User -> TurnGutterRow(timestampOf(turn)) {
-                            UserTurn(
-                                markdown = turn.markdown.orEmpty(),
-                                viaButton = turn.viaButton,
-                                failed = turn.sendState == SendState.Failed,
-                                onRetry = { onEvent(ThreadEvent.Retry(turn.id)) },
-                                onDiscard = { onEvent(ThreadEvent.Discard(turn.id)) },
-                            )
-                        }
+        Box(Modifier.weight(1f)) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp),
+            ) {
+                items(state.turns.size, key = { state.turns[it].id }) { index ->
+                    val turn = state.turns[index]
+                    Box(Modifier.padding(top = 16.dp)) {
+                        when (turn.kind) {
+                            TurnKind.User -> TurnGutterRow(timestampOf(turn)) {
+                                UserTurn(
+                                    markdown = turn.markdown.orEmpty(),
+                                    viaButton = turn.viaButton,
+                                    failed = turn.sendState == SendState.Failed,
+                                    onRetry = { onEvent(ThreadEvent.Retry(turn.id)) },
+                                    onDiscard = { onEvent(ThreadEvent.Discard(turn.id)) },
+                                )
+                            }
 
-                        TurnKind.Trace -> turn.trace?.let { trace ->
-                            TurnGutterRow(timestampOf(turn)) {
-                                TraceTurn(
-                                    trace = trace,
-                                    rollup = trace.rollupText(),
+                            TurnKind.Trace -> turn.trace?.let { trace ->
+                                TurnGutterRow(timestampOf(turn)) {
+                                    TraceTurn(
+                                        trace = trace,
+                                        rollup = trace.rollupText(),
+                                        expanded = state.expandedTraces.contains(turn.id),
+                                        showArgs = state.showToolArgs,
+                                        onToggle = { onEvent(ThreadEvent.ToggleTrace(turn.id)) },
+                                    )
+                                }
+                            }
+
+                            TurnKind.Agent -> TurnGutterRow(timestampOf(turn)) {
+                                val blocks = remember(turn.id, turn.markdown) {
+                                    segmentBlocks(turn.markdown.orEmpty())
+                                }
+                                AgentTurn(
+                                    agentName = state.agentProfile.name,
+                                    blocks = blocks,
+                                    onAction = { onEvent(ThreadEvent.ActionTapped(it)) },
+                                    onLinkClick = onLinkClick,
+                                )
+                            }
+
+                            TurnKind.System -> TurnGutterRow(timestampOf(turn)) {
+                                SystemTurn(
+                                    markdown = turn.markdown.orEmpty(),
                                     expanded = state.expandedTraces.contains(turn.id),
-                                    showArgs = state.showToolArgs,
                                     onToggle = { onEvent(ThreadEvent.ToggleTrace(turn.id)) },
                                 )
                             }
                         }
+                    }
+                }
 
-                        TurnKind.Agent -> TurnGutterRow(timestampOf(turn)) {
-                            val blocks = remember(turn.id, turn.markdown) {
-                                segmentBlocks(turn.markdown.orEmpty())
+                state.streaming?.let { run ->
+                    run.trace?.let { liveTrace ->
+                        item(key = "live-trace") {
+                            Box(Modifier.padding(top = 16.dp)) {
+                                TurnGutterRow(null, running = true) {
+                                    TraceTurn(
+                                        trace = liveTrace,
+                                        rollup = liveTrace.rollupText(),
+                                        expanded = state.expandedTraces.contains("live-trace"),
+                                        showArgs = state.showToolArgs,
+                                        onToggle = { onEvent(ThreadEvent.ToggleTrace("live-trace")) },
+                                        live = true,
+                                    )
+                                }
                             }
-                            AgentTurn(
-                                agentName = state.agentProfile.name,
-                                blocks = blocks,
-                                onAction = { onEvent(ThreadEvent.ActionTapped(it)) },
-                                onLinkClick = onLinkClick,
+                        }
+                    }
+                    item(key = "live-agent") {
+                        Box(Modifier.padding(top = 16.dp)) {
+                            TurnGutterRow(null, running = true) {
+                                val blocks = remember(run.text) { segmentBlocks(run.text) }
+                                AgentTurn(
+                                    agentName = state.agentProfile.name,
+                                    blocks = blocks,
+                                    streaming = true,
+                                    onLinkClick = onLinkClick,
+                                )
+                            }
+                        }
+                    }
+                    if (run.interrupted) {
+                        item(key = "interrupted") {
+                            Text(
+                                "▪ stream interrupted · reconnecting…",
+                                style = LemanType.meta,
+                                color = LemanColors.textFaint,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 46.dp, top = 8.dp),
                             )
                         }
                     }
                 }
             }
-
-            state.streaming?.let { run ->
-                run.trace?.let { liveTrace ->
-                    item(key = "live-trace") {
-                        Box(Modifier.padding(top = 16.dp)) {
-                            TurnGutterRow(null, running = true) {
-                                TraceTurn(
-                                    trace = liveTrace,
-                                    rollup = liveTrace.rollupText(),
-                                    expanded = state.expandedTraces.contains("live-trace"),
-                                    showArgs = state.showToolArgs,
-                                    onToggle = { onEvent(ThreadEvent.ToggleTrace("live-trace")) },
-                                    live = true,
-                                )
-                            }
-                        }
-                    }
-                }
-                item(key = "live-agent") {
-                    Box(Modifier.padding(top = 16.dp)) {
-                        TurnGutterRow(null, running = true) {
-                            val blocks = remember(run.text) { segmentBlocks(run.text) }
-                            AgentTurn(
-                                agentName = state.agentProfile.name,
-                                blocks = blocks,
-                                streaming = true,
-                                onLinkClick = onLinkClick,
-                            )
-                        }
-                    }
-                }
-                if (run.interrupted) {
-                    item(key = "interrupted") {
-                        Text(
-                            "▪ stream interrupted · reconnecting…",
-                            style = LemanType.meta,
-                            color = LemanColors.textFaint,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = 46.dp, top = 8.dp),
-                        )
-                    }
-                }
+            // Gated on didInitialScroll so the button never flashes on the frame
+            // before the initial anchor/bottom scroll lands (atBottom reads
+            // pre-scroll layoutInfo on first composition, which can be stale).
+            if (didInitialScroll && !atBottom) {
+                JumpToLatestButton(
+                    onClick = {
+                        val total = listState.layoutInfo.totalItemsCount
+                        if (total > 0) coroutineScope.launch { listState.animateScrollToItem(total - 1) }
+                    },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 18.dp, bottom = 12.dp),
+                )
             }
         }
         Composer(

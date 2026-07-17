@@ -24,6 +24,10 @@ data class ThreadEntity(
     // on send/finalize; comparing those to the server value spuriously rebuilds
     // app-touched threads every tick. Entity-only; not surfaced to the domain.
     val serverLastActive: Long = 0,
+    // High-water mark of read turns (ux-fixes spec): the createdAt of the latest
+    // turn as of the last markRead() call. Drives "open at first unread" on the
+    // next thread open; 0 means never explicitly read.
+    val lastReadAt: Long = 0,
 )
 
 @Entity(

@@ -89,6 +89,9 @@ class ThreadRepository(
     fun observeTurns(threadId: String): Flow<List<Turn>> =
         turnDao.observeTurns(threadId).map { list -> list.map { it.toDomain() } }
 
+    /** Point-in-time snapshot, e.g. to capture pre-markRead state on thread open. */
+    suspend fun getThread(threadId: String): Thread? = threadDao.getThread(threadId)?.toDomain()
+
     /** Unread bookkeeping: a run completing on the visible thread is read (spec 03). */
     fun setVisibleThread(threadId: String?) {
         visibleThreadId = threadId
@@ -202,8 +205,13 @@ class ThreadRepository(
         threadDao.getThread(threadId)?.let { threadDao.upsertThread(it.copy(pinned = pinned)) }
     }
 
+    /** Opening a thread reads it: unread clears and the read high-water mark advances
+     * to the latest turn (or now, if the thread has no turns yet) — spec ux-fixes. */
     suspend fun markRead(threadId: String) {
-        threadDao.getThread(threadId)?.let { threadDao.upsertThread(it.copy(unread = false)) }
+        threadDao.getThread(threadId)?.let { thread ->
+            val latestTurnAt = turnDao.getTurns(threadId).maxOfOrNull { it.createdAt } ?: clock()
+            threadDao.upsertThread(thread.copy(unread = false, lastReadAt = latestTurnAt))
+        }
     }
 
     /** Propagates to the server first; local state only changes on success (spec §4). */

@@ -32,6 +32,7 @@ fun ThreadEntity.toDomain(): Thread = Thread(
     source = source,
     agentName = agentName,
     agentGlyph = agentGlyph,
+    lastReadAt = lastReadAt,
 )
 
 fun Thread.toEntity(): ThreadEntity = ThreadEntity(
@@ -50,6 +51,7 @@ fun Thread.toEntity(): ThreadEntity = ThreadEntity(
     source = source,
     agentName = agentName,
     agentGlyph = agentGlyph,
+    lastReadAt = lastReadAt,
 )
 
 fun TurnEntity.toDomain(): Turn = Turn(

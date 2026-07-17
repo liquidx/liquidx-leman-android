@@ -173,4 +173,48 @@ class ThreadViewModelTest {
         }
         h.close()
     }
+
+    @Test
+    fun openingUnreadThread_initialScrollIndex_pointsAtFirstTurnAfterLastReadAt() = runTest {
+        val h = VmHarness(this)
+        h.client.chatScripts.add(completedScript("first answer"))
+        val threadId = h.repo.createThread("start")!!
+        advanceUntilIdle()
+        // Simulate a previous open+close: read up to the current tail.
+        h.repo.markRead(threadId)
+
+        h.now += 60_000
+        h.client.chatScripts.add(completedScript("second answer"))
+        h.repo.sendMessage(threadId, "follow up")
+        advanceUntilIdle()
+        assertTrue(h.repo.observeThreads().first().single().unread) // unread again
+
+        val vm = vm(h, threadId)
+        vm.state.test {
+            val loaded = awaitUntil { it.loaded && it.turns.size == 4 }
+            val firstNewTurn = loaded.turns[2] // [user0, agent0, user1, agent1]
+            assertEquals("follow up", firstNewTurn.markdown)
+            assertEquals(2, loaded.initialScrollIndex)
+            cancelAndIgnoreRemainingEvents()
+        }
+        h.close()
+    }
+
+    @Test
+    fun openingReadThread_initialScrollIndex_isNull() = runTest {
+        val h = VmHarness(this)
+        h.client.chatScripts.add(completedScript("a"))
+        val threadId = h.repo.createThread("start")!!
+        advanceUntilIdle()
+        h.repo.markRead(threadId)
+        assertFalse(h.repo.observeThreads().first().single().unread)
+
+        val vm = vm(h, threadId)
+        vm.state.test {
+            val loaded = awaitUntil { it.loaded && it.turns.isNotEmpty() }
+            assertEquals(null, loaded.initialScrollIndex)
+            cancelAndIgnoreRemainingEvents()
+        }
+        h.close()
+    }
 }

@@ -22,6 +22,7 @@ import net.liquidx.leman.domain.model.Settings
 import net.liquidx.leman.domain.model.Thread
 import net.liquidx.leman.domain.model.ThreadState
 import net.liquidx.leman.domain.model.Turn
+import net.liquidx.leman.domain.model.TurnKind
 import net.liquidx.leman.ui.format.TimeFormat
 
 data class ThreadUiState(
@@ -33,6 +34,10 @@ data class ThreadUiState(
     val showToolArgs: Boolean = true,
     val connState: ConnState = ConnState.NotConfigured,
     val loaded: Boolean = false,
+    /** Index of the first unread turn as of open, or null to open at the bottom
+     * (spec ux-fixes: either the thread was already read, or it has no unread
+     * turns anymore). ThreadScreen consumes this once, on first composition. */
+    val initialScrollIndex: Int? = null,
 ) {
     val composerEnabled: Boolean get() = connState !is ConnState.NotConfigured
 
@@ -72,9 +77,24 @@ class ThreadViewModel(
         savedState.get<HashMap<String, Boolean>>(KEY_TRACE_OVERRIDES) ?: HashMap(),
     )
 
+    /**
+     * Snapshot of the thread's read state as of open, captured BEFORE markRead()
+     * runs — markRead immediately clears unread and advances lastReadAt, so this
+     * is the only place that can see what the user hadn't read yet (spec ux-fixes).
+     * Null until the snapshot lands; [state] withholds `loaded` until then so
+     * ThreadScreen never sees a spurious "read" snapshot on the very first frame.
+     */
+    private data class OpenSnapshot(val wasUnread: Boolean, val lastReadAt: Long)
+    private val openSnapshot = MutableStateFlow<OpenSnapshot?>(null)
+
     init {
         repo.setVisibleThread(threadId)
         viewModelScope.launch {
+            val before = repo.getThread(threadId)
+            openSnapshot.value = OpenSnapshot(
+                wasUnread = before?.unread == true,
+                lastReadAt = before?.lastReadAt ?: 0,
+            )
             repo.markRead(threadId)
             repo.recoverIfRunning(threadId)
         }
@@ -87,6 +107,7 @@ class ThreadViewModel(
         settingsStore.settings,
         connectionManager.state,
         traceOverrides,
+        openSnapshot,
     ) { values ->
         @Suppress("UNCHECKED_CAST")
         val thread = values[0] as Thread?
@@ -99,12 +120,19 @@ class ThreadViewModel(
 
         @Suppress("UNCHECKED_CAST")
         val overrides = values[5] as Map<String, Boolean>
+        val opened = values[6] as OpenSnapshot?
 
         val expanded = turns.asSequence()
-            .filter { it.trace != null }
+            .filter { it.trace != null || it.kind == TurnKind.System }
+            .filter { turn ->
+                val default = if (turn.trace != null) settings.expandTracesByDefault else false
+                overrides[turn.id] ?: default
+            }
             .map { it.id }
-            .filter { overrides[it] ?: settings.expandTracesByDefault }
             .toSet()
+        val initialScrollIndex = opened?.takeIf { it.wasUnread }?.let { snap ->
+            turns.indexOfFirst { it.createdAt > snap.lastReadAt }.takeIf { it >= 0 }
+        }
         ThreadUiState(
             thread = thread,
             turns = turns,
@@ -113,7 +141,8 @@ class ThreadViewModel(
             expandedTraces = expanded,
             showToolArgs = settings.showToolArgs,
             connState = conn,
-            loaded = true,
+            loaded = opened != null,
+            initialScrollIndex = initialScrollIndex,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ThreadUiState())
 
