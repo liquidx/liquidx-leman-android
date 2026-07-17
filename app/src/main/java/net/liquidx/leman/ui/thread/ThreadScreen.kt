@@ -1,5 +1,6 @@
 package net.liquidx.leman.ui.thread
 
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
@@ -26,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -63,11 +65,18 @@ fun ThreadScreen(
 
     // Follow the bottom while streaming only if already there (spec 05); also
     // drives the jump-to-latest affordance's visibility (ux-fixes spec).
-    val atBottom by remember {
+    // Pixel-aware, not index-based: a very tall last item (e.g. a cron digest
+    // body) counts as "visible" by index even when only its first lines are on
+    // screen — at bottom means its bottom edge is inside the viewport too.
+    val bottomSlackPx = with(LocalDensity.current) { 24.dp.toPx() }
+    val atBottom by remember(bottomSlackPx) {
         derivedStateOf {
             val info = listState.layoutInfo
             val last = info.visibleItemsInfo.lastOrNull()
-            last == null || last.index >= info.totalItemsCount - 1
+            last == null || (
+                last.index >= info.totalItemsCount - 1 &&
+                    last.offset + last.size <= info.viewportEndOffset + bottomSlackPx
+                )
         }
     }
     // First open lands on the first unread turn (if any); every subsequent
@@ -213,7 +222,19 @@ fun ThreadScreen(
                 JumpToLatestButton(
                     onClick = {
                         val total = listState.layoutInfo.totalItemsCount
-                        if (total > 0) coroutineScope.launch { listState.animateScrollToItem(total - 1) }
+                        if (total > 0) {
+                            coroutineScope.launch {
+                                listState.animateScrollToItem(total - 1)
+                                // animateScrollToItem aligns the item's TOP with the
+                                // viewport — a tall last item still overflows below.
+                                // Finish the job: scroll the remaining overshoot so
+                                // the true bottom lands in view.
+                                val info = listState.layoutInfo
+                                val last = info.visibleItemsInfo.lastOrNull() ?: return@launch
+                                val overshoot = last.offset + last.size - info.viewportEndOffset
+                                if (overshoot > 0) listState.animateScrollBy(overshoot.toFloat())
+                            }
+                        }
                     },
                     modifier = Modifier
                         .align(Alignment.BottomEnd)

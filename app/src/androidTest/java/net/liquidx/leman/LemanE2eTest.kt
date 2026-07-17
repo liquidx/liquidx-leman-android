@@ -194,6 +194,76 @@ class LemanE2eTest {
         )
     }
 
+    /**
+     * Seeds a 2-turn thread whose last (agent) turn is far taller than the
+     * viewport — the synced-cron-digest shape: few LazyColumn items, one huge
+     * message. Index-based bottom detection considers the last item "visible"
+     * from its very first line, so this shape is exactly where pixel-aware
+     * detection matters (ux-fixes follow-up).
+     */
+    private suspend fun seedTallThread(db: LemanDatabase) {
+        val now = System.currentTimeMillis()
+        val base = now - 3_600_000L
+        db.threadDao().upsertThread(
+            ThreadEntity(
+                id = "th-tall", title = "tall digest thread", preview = "digest",
+                state = "idle", pinned = false, unread = false,
+                createdAt = base, lastActiveAt = now, source = "cron",
+                agentName = null, agentGlyph = null,
+                lastReadAt = base + 2 * 60_000L,
+            ),
+        )
+        db.turnDao().upsertTurns(
+            listOf(
+                TurnEntity(
+                    id = "th-tall-turn-1", threadId = "th-tall", seq = 1, kind = "user",
+                    createdAt = base + 60_000L, markdown = "run the digest",
+                    blocksJson = null, traceJson = null, runId = null,
+                    sendState = "synced", viaButton = false,
+                ),
+                TurnEntity(
+                    id = "th-tall-turn-2", threadId = "th-tall", seq = 2, kind = "agent",
+                    createdAt = base + 2 * 60_000L,
+                    markdown = (1..60).joinToString("\n\n") { "digest item line %02d".format(it) },
+                    blocksJson = null, traceJson = null, runId = null,
+                    sendState = "synced", viaButton = false,
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun tallLastTurn_scrolledToTop_showsJumpToLatest_tapLandsAtTrueBottom() {
+        launch(seedExtra = { db -> seedTallThread(db) })
+        compose.onNodeWithText("tall digest thread").performClick()
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithText("digest item line 01").fetchSemanticsNodes().isNotEmpty()
+        }
+        // Scroll to the very top: the tall last item is still index-"visible",
+        // but its bottom edge is far below the fold — the control must show.
+        compose.onAllNodes(hasScrollToIndexAction())[0].performScrollToIndex(0)
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithText("run the digest").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithText("↓ latest").fetchSemanticsNodes().isNotEmpty()
+        }
+
+        // Tap: lands at the true bottom (the digest's last lines on screen),
+        // and the control retires — which, with pixel-aware detection, is
+        // itself the assertion that the item's bottom edge is in the viewport.
+        compose.onNodeWithText("↓ latest").performClick()
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithText("digest item line 60").fetchSemanticsNodes().any {
+                it.boundsInRoot.height > 0
+            }
+        }
+        compose.onNodeWithText("digest item line 60").assertIsDisplayed()
+        compose.waitUntil(5_000) {
+            compose.onAllNodesWithText("↓ latest").fetchSemanticsNodes().isEmpty()
+        }
+    }
+
     @Test
     fun unreadThread_opensAnchoredAtFirstUnreadTurn() {
         launch(seedExtra = { db -> seedLongThread(db, unread = true, readUpToTurn = 15) })
