@@ -395,8 +395,13 @@ class ThreadRepository(
                     if (replied) {
                         val now = clock()
                         val rebuilt = sessionTurns(threadId, messages)
+                        // Mirror SessionSyncer's preview rule: skip trailing system
+                        // turns (injected framework preambles) so they can't leak
+                        // into the thread list preview (ux-fixes spec).
                         val newPreview = (
-                            messages.lastOrNull { m -> !m.content.isNullOrEmpty() }?.content ?: ""
+                            rebuilt.lastOrNull {
+                                it.markdown != null && (it.kind == "user" || it.kind == "agent")
+                            }?.markdown ?: ""
                             ).snippet(120)
                         // One transaction: observers never see the mid-rebuild empty state.
                         // Unsynced local turns (a still-failed/sending user message) survive

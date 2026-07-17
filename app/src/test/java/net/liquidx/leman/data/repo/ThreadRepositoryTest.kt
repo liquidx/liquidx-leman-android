@@ -292,6 +292,42 @@ class ThreadRepositoryTest {
     }
 
     @Test
+    fun recoverByPolling_trailingSystemMessage_skippedForPreview() = runTest {
+        // The polled history ends with an injected framework preamble; the
+        // rebuilt preview must come from the last real user/agent markdown,
+        // mirroring SessionSyncer's preview rule (ux-fixes spec).
+        client.createSessionResult = ApiResult.Ok(SessionDto(id = "s1"))
+        client.chatScripts.add(
+            listOf(
+                RunEvent.RunStarted("r1", 1.0),
+                HermesStreamException(ApiError.Network(IOException("drop"))),
+            ),
+        )
+        client.messagesBySession["s1"] = ApiResult.Ok(
+            listOf(
+                SessionMessageDto(1, "user", "hi", timestamp = 1.0),
+                SessionMessageDto(2, "assistant", "recovered answer", timestamp = 5.0, finishReason = "stop"),
+                SessionMessageDto(
+                    3, "user",
+                    "[IMPORTANT: You are running as a scheduled cron job. DELIVERY: ...]",
+                    timestamp = 6.0,
+                ),
+            ),
+        )
+        val repo = repo()
+        repo.createThread("hi")
+        advanceUntilIdle()
+
+        val thread = repo.observeThreads().first().single()
+        assertEquals(ThreadState.Idle, thread.state)
+        assertEquals("recovered answer", thread.preview)
+        assertEquals(
+            listOf(TurnKind.User, TurnKind.Agent, TurnKind.System),
+            repo.observeTurns("s1").first().map { it.kind },
+        )
+    }
+
+    @Test
     fun droppedStream_beforeRunStarted_failsTurn() = runTest {
         client.createSessionResult = ApiResult.Ok(SessionDto(id = "s1"))
         client.chatScripts.add(listOf(HermesStreamException(ApiError.Network(IOException("refused")))))
