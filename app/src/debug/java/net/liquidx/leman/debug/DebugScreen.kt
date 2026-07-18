@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -21,32 +22,30 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.navigation.NavController
 import kotlinx.coroutines.launch
 import net.liquidx.leman.domain.model.AgentBlock
 import net.liquidx.leman.ui.components.CodeBlock
-import net.liquidx.leman.ui.components.ConfigTab
 import net.liquidx.leman.ui.components.LemanButton
 import net.liquidx.leman.ui.components.LemanButtonKind
-import net.liquidx.leman.ui.components.LemanTabBar
 import net.liquidx.leman.ui.components.LemanToggle
 import net.liquidx.leman.ui.components.PromptField
 import net.liquidx.leman.ui.components.ScreenFrame
 import net.liquidx.leman.ui.components.SectionHeader
 import net.liquidx.leman.ui.components.StatusRow
-import net.liquidx.leman.ui.components.ThreadsTab
 import net.liquidx.leman.ui.components.TitleRow
 import net.liquidx.leman.ui.markdown.MarkdownBody
 import net.liquidx.leman.ui.nav.rememberWallClock
 import net.liquidx.leman.ui.theme.LemanColors
 import net.liquidx.leman.ui.theme.LemanType
 
-/** The DEBUG panel (spec 08) — danger-tinted third tab, debug builds only. */
+/** The DEBUG panel (spec 08) — a config sub-page, debug builds only. */
 @Composable
-fun DebugScreen(hooks: DebugHooksImpl, navController: NavController) {
+fun DebugScreen(hooks: DebugHooksImpl, onBack: () -> Unit) {
     val container = hooks.container
     val scope = rememberCoroutineScope()
     val connState by container.connectionManager.state.collectAsState()
@@ -69,15 +68,21 @@ fun DebugScreen(hooks: DebugHooksImpl, navController: NavController) {
 
     ScreenFrame(
         statusRow = { StatusRow(rememberWallClock(), connState) },
-        titleRow = { TitleRow("debug", AnnotatedString("not in release")) },
-        bottom = {
-            LemanTabBar(
-                listOf(ThreadsTab, ConfigTab) + hooks.extraTabs,
-                activeId = "debug",
-                onSelect = { tab ->
-                    if (tab.id != "debug") navController.navigate(tab.id) { launchSingleTop = true }
-                },
-            )
+        titleRow = {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .defaultMinSize(minWidth = 44.dp, minHeight = 44.dp)
+                        .clickable(onClick = onBack)
+                        .semantics { contentDescription = "back" },
+                ) {
+                    Text("‹", style = LemanType.value, color = LemanColors.textSecondary)
+                }
+                Box(Modifier.weight(1f)) {
+                    TitleRow("debug", AnnotatedString("not in release"))
+                }
+            }
         },
     ) {
         LazyColumn {

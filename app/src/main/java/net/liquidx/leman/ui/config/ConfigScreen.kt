@@ -49,6 +49,7 @@ fun ConfigScreen(
     onExport: () -> Unit,
     onOpenThreads: () -> Unit,
     onSelectTab: (LemanTab) -> Unit = {},
+    onOpenDebug: (() -> Unit)? = null,
     serverUrlState: TextFieldState = rememberTextFieldState(),
     apiKeyState: TextFieldState = rememberTextFieldState(),
     agentNameState: TextFieldState = rememberTextFieldState(),
@@ -195,6 +196,29 @@ fun ConfigScreen(
                     { onEvent(ConfigEvent.ClearAllThreads) },
                     kind = LemanButtonKind.Danger,
                 )
+            }
+
+            // ---- DEVELOPER -------------------------------------------------
+            // Present only in debug builds (onOpenDebug is null in release).
+            onOpenDebug?.let { openDebug ->
+                SectionGap()
+                SectionHeader("developer")
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = openDebug)
+                        .padding(horizontal = 18.dp, vertical = 10.dp),
+                ) {
+                    Text(
+                        "debug panel",
+                        style = LemanType.meta.copy(fontSize = 11.sp),
+                        color = LemanColors.danger,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text("›", style = LemanType.value, color = LemanColors.danger)
+                }
+                Caption("gateway · chaos · state · logs · not in release")
             }
         }
     }
