@@ -30,6 +30,7 @@ class SettingsStore(
         val biometricUnlock = booleanPreferencesKey("biometric_unlock")
         val expandTraces = booleanPreferencesKey("expand_traces_by_default")
         val showToolArgs = booleanPreferencesKey("show_tool_args")
+        val notificationsEnabled = booleanPreferencesKey("notifications_enabled")
     }
 
     private val store: DataStore<Preferences> =
@@ -43,6 +44,7 @@ class SettingsStore(
             biometricUnlock = p[Keys.biometricUnlock] ?: false,
             expandTracesByDefault = p[Keys.expandTraces] ?: false,
             showToolArgs = p[Keys.showToolArgs] ?: true,
+            notificationsEnabled = p[Keys.notificationsEnabled] ?: false,
         )
     }
 
@@ -55,6 +57,7 @@ class SettingsStore(
                 biometricUnlock = p[Keys.biometricUnlock] ?: false,
                 expandTracesByDefault = p[Keys.expandTraces] ?: false,
                 showToolArgs = p[Keys.showToolArgs] ?: true,
+                notificationsEnabled = p[Keys.notificationsEnabled] ?: false,
             )
             val next = transform(current)
             p[Keys.serverUrl] = next.serverUrl
@@ -63,6 +66,7 @@ class SettingsStore(
             p[Keys.biometricUnlock] = next.biometricUnlock
             p[Keys.expandTraces] = next.expandTracesByDefault
             p[Keys.showToolArgs] = next.showToolArgs
+            p[Keys.notificationsEnabled] = next.notificationsEnabled
         }
     }
 

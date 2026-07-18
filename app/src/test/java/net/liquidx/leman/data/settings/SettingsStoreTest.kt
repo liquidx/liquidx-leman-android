@@ -55,4 +55,12 @@ class SettingsStoreTest {
         assertEquals(true, s.expandTracesByDefault)
         assertEquals(false, s.showToolArgs)
     }
+
+    @Test
+    fun notificationsEnabled_defaultsFalse_persists() = runTest {
+        val store = newStore(this)
+        assertEquals(false, store.settings.first().notificationsEnabled)
+        store.update { it.copy(notificationsEnabled = true) }
+        assertEquals(true, store.settings.first().notificationsEnabled)
+    }
 }

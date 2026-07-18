@@ -8,6 +8,7 @@ data class Settings(
     val biometricUnlock: Boolean = false,
     val expandTracesByDefault: Boolean = false,
     val showToolArgs: Boolean = true,
+    val notificationsEnabled: Boolean = false,
 ) {
     val agentProfile: AgentProfile get() = AgentProfile(agentName, agentGlyph)
 
