@@ -7,8 +7,10 @@ cheap and more useful, and the tooling doubles as the fake-data host for tests (
 
 ## Entry: the DEBUG panel
 
-Debug builds add a third tab `debug` to the tab bar (danger-colored icon so it can't be
-mistaken for product UI). It opens a DEBUG screen in the design language with sections:
+Debug builds add a danger-colored **developer › debug panel** row at the bottom of the
+config screen (so it can't be mistaken for product UI). It opens the DEBUG screen as a
+config sub-page — a pushed detail view with a back affordance, no tab bar — in the design
+language with sections:
 
 ### GATEWAY
 - Active target: real server URL (`https://api.gent.ino.ink`) vs **mock server** toggle

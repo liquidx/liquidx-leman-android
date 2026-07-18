@@ -7,8 +7,6 @@ import androidx.navigation.compose.composable
 import net.liquidx.leman.data.remote.HermesClient
 import net.liquidx.leman.di.AppContainer
 import net.liquidx.leman.di.DebugHooks
-import net.liquidx.leman.ui.components.LemanTab
-import net.liquidx.leman.ui.components.icons.TablerIcons
 import net.liquidx.leman.util.LemanLog
 
 /** Loaded reflectively by [AppContainer] in debug builds only (spec 08). */
@@ -22,8 +20,8 @@ class DebugHooksImpl : DebugHooks {
     var switchable: SwitchableHermesClient? = null
         private set
 
-    override val extraTabs: List<LemanTab> =
-        listOf(LemanTab("debug", "debug", TablerIcons.Bug, danger = true))
+    // Debug is no longer a top-level tab — it's reached from a "developer" row in
+    // config as a pushed sub-page (see ConfigScreen + registerDestinations below).
 
     override fun interceptors(): List<okhttp3.Interceptor> = listOf(DebugInterceptor(bus, chaos))
 
@@ -43,7 +41,7 @@ class DebugHooksImpl : DebugHooks {
 
     override fun registerDestinations(builder: NavGraphBuilder, navController: NavController) {
         builder.composable("debug") {
-            DebugScreen(hooks = this@DebugHooksImpl, navController = navController)
+            DebugScreen(hooks = this@DebugHooksImpl, onBack = { navController.popBackStack() })
         }
     }
 }
