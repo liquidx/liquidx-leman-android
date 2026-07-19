@@ -15,3 +15,6 @@
 local.properties
 
 .env
+
+# Firebase config (contains project identifiers; regenerate per environment)
+app/google-services.json
