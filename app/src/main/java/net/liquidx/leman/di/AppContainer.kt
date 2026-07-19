@@ -6,6 +6,7 @@ import androidx.navigation.NavGraphBuilder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import net.liquidx.leman.BuildConfig
 import net.liquidx.leman.data.local.LemanDatabase
 import net.liquidx.leman.data.remote.HermesClient
@@ -15,7 +16,12 @@ import net.liquidx.leman.data.repo.SyncScheduler
 import net.liquidx.leman.data.repo.ThreadRepository
 import net.liquidx.leman.data.settings.ApiKeyStore
 import net.liquidx.leman.data.settings.KeystoreApiKeyStore
+import net.liquidx.leman.data.settings.PushPrefsStore
 import net.liquidx.leman.data.settings.SettingsStore
+import net.liquidx.leman.domain.model.ApiResult
+import net.liquidx.leman.messaging.DeviceRegistrar
+import net.liquidx.leman.messaging.MessageNotifier
+import net.liquidx.leman.messaging.fetchFcmToken
 import net.liquidx.leman.ui.components.LemanTab
 
 /**
@@ -47,6 +53,7 @@ class AppContainer(
         // its own container — so tests inject an isolated, per-test SettingsStore here
         // rather than colliding on the production settings file.
         val settings: SettingsStore? = null,
+        val pushPrefs: PushPrefsStore? = null,
     )
 
     private val appContext = context.applicationContext
@@ -58,6 +65,28 @@ class AppContainer(
     }
 
     val settings: SettingsStore by lazy { overrides.settings ?: SettingsStore(appContext, appScope) }
+
+    val pushPrefs: PushPrefsStore by lazy { overrides.pushPrefs ?: PushPrefsStore(appContext, appScope) }
+
+    val messageNotifier: MessageNotifier by lazy { MessageNotifier(appContext) }
+
+    val deviceRegistrar: DeviceRegistrar by lazy {
+        DeviceRegistrar(
+            client = hermesClient,
+            settingsStore = settings,
+            apiKeyStore = apiKeyStore,
+            pushPrefs = pushPrefs,
+            tokenProvider = { fetchFcmToken() },
+        )
+    }
+
+    /**
+     * An FCM-launched process never runs ConnectionManager.reconfigure(), so a
+     * background worker must configure the client transport itself before any call.
+     */
+    suspend fun configurePushClient() {
+        hermesClient.reconfigure(settings.settings.first().serverUrl, apiKeyStore.get())
+    }
 
     val apiKeyStore: ApiKeyStore by lazy {
         overrides.apiKeyStore ?: KeystoreApiKeyStore(appContext, appScope)
@@ -95,7 +124,10 @@ class AppContainer(
 
     val syncScheduler: SyncScheduler by lazy {
         SyncScheduler(
-            syncNow = { threadRepository.syncNow() },
+            syncNow = {
+                val result = threadRepository.syncNow()
+                if (result is ApiResult.Ok && !pushPrefs.hasSeeded()) pushPrefs.markSeeded()
+            },
             connState = connectionManager.state,
             scope = appScope,
         )
