@@ -7,6 +7,15 @@ import net.liquidx.leman.data.remote.HermesClient
 import net.liquidx.leman.data.remote.SessionDto
 import net.liquidx.leman.domain.model.ApiResult
 
+/** A notification-worthy advance surfaced during a sync (a rebuilt thread whose newest turn is an agent reply). */
+data class SyncChange(
+    val threadId: String,
+    val title: String,
+    val preview: String,
+    val isNewSession: Boolean,
+    val serverLastActive: Long,
+)
+
 /**
  * Pulls the server's session store into Room (spec 03: Room is a cache; the
  * gateway is the system of record). Local-only sidecar state — pinned, unread,
@@ -19,7 +28,7 @@ class SessionSyncer(
     private val isRunActive: (String) -> Boolean,
     private val visibleThreadId: () -> String?,
 ) {
-    suspend fun syncOnce(): ApiResult<Unit> {
+    suspend fun syncOnce(collect: ((SyncChange) -> Unit)? = null): ApiResult<Unit> {
         val sessions = mutableListOf<SessionDto>()
         var offset = 0
         while (true) {
@@ -77,6 +86,24 @@ class SessionSyncer(
                 agentGlyph = local?.agentGlyph,
                 serverLastActive = lastActiveMs,
             )
+            if (collect != null) {
+                // Notify only when the newest conversational turn is an agent reply.
+                // Exclude trace turns (which anchor before an agent's content), but NOT
+                // system turns — a trailing "[IMPORTANT:" framework preamble means the
+                // latest activity is an injected prompt with no reply yet, so skip it.
+                val newestTurn = turns.lastOrNull { it.kind != "trace" }
+                if (newestTurn?.kind == "agent") {
+                    collect(
+                        SyncChange(
+                            threadId = session.id,
+                            title = rebuilt.title,
+                            preview = rebuilt.preview,
+                            isNewSession = local == null,
+                            serverLastActive = lastActiveMs,
+                        ),
+                    )
+                }
+            }
             // One transaction: observers never see a thread whose turns were deleted
             // but not yet rebuilt. Unsynced local turns (a sending/failed user message
             // the server hasn't accepted) are carried across the rebuild so the retry

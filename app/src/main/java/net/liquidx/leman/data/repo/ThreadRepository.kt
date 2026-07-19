@@ -31,6 +31,7 @@ import net.liquidx.leman.domain.model.AgentProfile
 import net.liquidx.leman.domain.model.ApiError
 import net.liquidx.leman.domain.model.ApiResult
 import net.liquidx.leman.domain.model.RunEvent
+import net.liquidx.leman.domain.model.map
 import net.liquidx.leman.domain.model.Thread
 import net.liquidx.leman.domain.model.Trace
 import net.liquidx.leman.domain.model.Turn
@@ -82,6 +83,15 @@ class ThreadRepository(
     )
 
     suspend fun syncNow(): ApiResult<Unit> = syncer.syncOnce()
+
+    /**
+     * Background/push sync that reports notification-worthy advances (FCM push client).
+     * Foreground sync uses [syncNow] with no collector, so its behavior is unchanged.
+     */
+    suspend fun syncForNotifications(): ApiResult<List<SyncChange>> {
+        val changes = mutableListOf<SyncChange>()
+        return syncer.syncOnce { changes += it }.map { changes }
+    }
 
     fun observeThreads(): Flow<List<Thread>> =
         threadDao.observeThreads().map { list -> list.map { it.toDomain() } }

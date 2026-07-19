@@ -76,6 +76,18 @@ class SessionSyncerTest {
     private fun TestScope.syncer(active: Set<String> = emptySet(), visible: String? = null) =
         SessionSyncer(database(), client, isRunActive = { it in active }, visibleThreadId = { visible })
 
+    // Must be a suspend call inside the test coroutine — wrapping syncOnce in
+    // runBlocking here deadlocks, since the Room DAO calls are pinned to the same
+    // test scheduler thread that runBlocking would block.
+    private suspend fun TestScope.collect(
+        active: Set<String> = emptySet(),
+        visible: String? = null,
+    ): Pair<ApiResult<Unit>, List<SyncChange>> {
+        val changes = mutableListOf<SyncChange>()
+        val result = syncer(active, visible).syncOnce { changes += it }
+        return result to changes
+    }
+
     private suspend fun TestScope.seedThread(
         id: String,
         lastActiveAt: Long,
@@ -365,6 +377,51 @@ class SessionSyncerTest {
         val thread = db.threadDao().getThread("run_cron")!!
         assertEquals("sent the digest", thread.preview)
         assertEquals(listOf("user", "agent", "system"), db.turnDao().getTurns("run_cron").map { it.kind })
+    }
+
+    @Test
+    fun collect_reportsNewAgentReply() = runTest {
+        client.listSessionsResults.add(
+            ApiResult.Ok(SessionListDto(data = listOf(session("run_x", 200.0)), hasMore = false)),
+        )
+        client.messagesBySession["run_x"] = ApiResult.Ok(
+            listOf(
+                SessionMessageDto(1, "user", "q", timestamp = 190.0),
+                SessionMessageDto(2, "assistant", "the answer", timestamp = 195.0),
+            ),
+        )
+        val (result, changes) = collect()
+        assertTrue(result is ApiResult.Ok)
+        assertEquals(1, changes.size)
+        assertEquals("run_x", changes.single().threadId)
+        assertTrue(changes.single().isNewSession)
+        assertEquals(200_000L, changes.single().serverLastActive)
+    }
+
+    @Test
+    fun collect_skipsWhenNewestTurnIsUserOrSystem() = runTest {
+        client.listSessionsResults.add(
+            ApiResult.Ok(SessionListDto(data = listOf(session("run_cron", 200.0, source = "cron")), hasMore = false)),
+        )
+        client.messagesBySession["run_cron"] = ApiResult.Ok(
+            listOf(
+                SessionMessageDto(1, "user", "digest", timestamp = 100.0),
+                SessionMessageDto(2, "assistant", "sent", timestamp = 110.0, finishReason = "stop"),
+                SessionMessageDto(3, "user", "[IMPORTANT: cron preamble]", timestamp = 190.0),
+            ),
+        )
+        val (_, changes) = collect()
+        assertTrue(changes.isEmpty())
+    }
+
+    @Test
+    fun collect_skipsUnchangedThread() = runTest {
+        seedThread("run_x", lastActiveAt = 200_000, serverLastActive = 200_000)
+        client.listSessionsResults.add(
+            ApiResult.Ok(SessionListDto(data = listOf(session("run_x", 200.0)), hasMore = false)),
+        )
+        val (_, changes) = collect()
+        assertTrue(changes.isEmpty())
     }
 
     @Test
