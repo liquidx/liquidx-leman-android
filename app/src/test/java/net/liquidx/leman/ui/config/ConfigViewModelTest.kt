@@ -233,4 +233,17 @@ class ConfigViewModelTest {
         }
         h.close()
     }
+
+    @Test
+    fun setNotificationsEnabled_persists() = runTest {
+        val h = VmHarness(this)
+        val vm = vm(h)
+        vm.state.test {
+            awaitUntil { it.loaded }
+            vm.onEvent(ConfigEvent.SetNotificationsEnabled(true))
+            assertTrue(awaitUntil { it.settings.notificationsEnabled }.settings.notificationsEnabled)
+            cancelAndIgnoreRemainingEvents()
+        }
+        h.close()
+    }
 }

@@ -54,6 +54,7 @@ sealed interface ConfigEvent {
     data class SelectGlyph(val glyph: String) : ConfigEvent
     data class SetExpandTraces(val enabled: Boolean) : ConfigEvent
     data class SetShowToolArgs(val enabled: Boolean) : ConfigEvent
+    data class SetNotificationsEnabled(val enabled: Boolean) : ConfigEvent
     data object ClearAllThreads : ConfigEvent
 }
 
@@ -146,6 +147,7 @@ class ConfigViewModel(
             }
             is ConfigEvent.SetExpandTraces -> update { it.copy(expandTracesByDefault = event.enabled) }
             is ConfigEvent.SetShowToolArgs -> update { it.copy(showToolArgs = event.enabled) }
+            is ConfigEvent.SetNotificationsEnabled -> update { it.copy(notificationsEnabled = event.enabled) }
             ConfigEvent.ClearAllThreads -> {
                 if (confirmClearArmed.value) {
                     confirmJob?.cancel()

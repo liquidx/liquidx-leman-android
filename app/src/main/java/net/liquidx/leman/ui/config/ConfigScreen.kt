@@ -50,6 +50,7 @@ fun ConfigScreen(
     onOpenThreads: () -> Unit,
     onSelectTab: (LemanTab) -> Unit = {},
     onOpenDebug: (() -> Unit)? = null,
+    onToggleNotifications: (Boolean) -> Unit = { onEvent(ConfigEvent.SetNotificationsEnabled(it)) },
     serverUrlState: TextFieldState = rememberTextFieldState(),
     apiKeyState: TextFieldState = rememberTextFieldState(),
     agentNameState: TextFieldState = rememberTextFieldState(),
@@ -182,6 +183,12 @@ fun ConfigScreen(
             ToggleRow("show tool args in traces", state.settings.showToolArgs) {
                 onEvent(ConfigEvent.SetShowToolArgs(it))
             }
+            SectionGap()
+
+            // ---- NOTIFICATIONS --------------------------------------------
+            SectionHeader("notifications")
+            ToggleRow("notify on new messages", state.settings.notificationsEnabled, onToggleNotifications)
+            Caption("pushes wake the app to check for new agent replies")
             SectionGap()
 
             // ---- DATA ------------------------------------------------------

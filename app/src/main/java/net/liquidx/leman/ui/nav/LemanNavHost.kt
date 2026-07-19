@@ -180,6 +180,12 @@ fun LemanNavHost(
             )
             val state by vm.state.collectAsStateWithLifecycle()
             val scope = androidx.compose.runtime.rememberCoroutineScope()
+            val notifPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+                androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+            ) { granted ->
+                vm.onEvent(net.liquidx.leman.ui.config.ConfigEvent.SetNotificationsEnabled(granted))
+                if (granted) enqueueRegister(context)
+            }
             ConfigScreen(
                 state = state,
                 clock = clock,
@@ -201,6 +207,20 @@ fun LemanNavHost(
                 onOpenThreads = { navController.navigate(Routes.THREADS) { launchSingleTop = true } },
                 onSelectTab = { tab -> navController.navigate(tab.id) { launchSingleTop = true } },
                 onOpenDebug = container.debugHooks?.let { { navController.navigate("debug") { launchSingleTop = true } } },
+                onToggleNotifications = { enabled ->
+                    if (!enabled) {
+                        vm.onEvent(net.liquidx.leman.ui.config.ConfigEvent.SetNotificationsEnabled(false))
+                    } else if (
+                        androidx.core.content.ContextCompat.checkSelfPermission(
+                            context, android.Manifest.permission.POST_NOTIFICATIONS,
+                        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                    ) {
+                        vm.onEvent(net.liquidx.leman.ui.config.ConfigEvent.SetNotificationsEnabled(true))
+                        enqueueRegister(context)
+                    } else {
+                        notifPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                },
                 serverUrlState = vm.serverUrlState,
                 apiKeyState = vm.apiKeyState,
                 agentNameState = vm.agentNameState,
@@ -209,4 +229,16 @@ fun LemanNavHost(
 
         container.debugHooks?.registerDestinations(this, navController)
     }
+}
+
+private fun enqueueRegister(context: android.content.Context) {
+    androidx.work.WorkManager.getInstance(context).enqueueUniqueWork(
+        "register-device",
+        androidx.work.ExistingWorkPolicy.REPLACE,
+        androidx.work.OneTimeWorkRequestBuilder<net.liquidx.leman.messaging.DeviceRegistrationWorker>()
+            .setConstraints(
+                androidx.work.Constraints.Builder()
+                    .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build(),
+            ).build(),
+    )
 }
