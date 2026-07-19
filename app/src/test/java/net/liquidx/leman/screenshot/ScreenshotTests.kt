@@ -50,14 +50,20 @@ class ScreenshotTests {
 
     private val tabs = listOf(ThreadsTab, ConfigTab)
 
-    private fun snap(name: String, content: @Composable () -> Unit) {
+    /**
+     * [settleMillis] defaults to one frame so looping animations (the running
+     * dot's pulse) are always captured at the same phase. Shots of a settled
+     * transition pass a longer value so the spring has finished; capturing it
+     * mid-flight would make the golden depend on animation timing.
+     */
+    private fun snap(name: String, settleMillis: Long = 64, content: @Composable () -> Unit) {
         compose.mainClock.autoAdvance = false
         compose.setContent {
             LemanTheme {
                 Box(Modifier.size(380.dp, 788.dp).lemanScreenBackground()) { content() }
             }
         }
-        compose.mainClock.advanceTimeBy(64)
+        compose.mainClock.advanceTimeBy(settleMillis)
         compose.onRoot().captureRoboImage("src/test/screenshots/$name.png")
     }
 
@@ -67,6 +73,19 @@ class ScreenshotTests {
     fun threads_default() = snap("2a-threads-default") {
         ThreadsScreen(
             state = ScreenshotFixtures.threadsState(),
+            clock = "09:41", tabs = tabs, onEvent = {},
+            onOpenThread = {}, onNewThread = {}, onOpenConfig = {},
+        )
+    }
+
+    /** A row swiped open, uncovering its delete action. */
+    @Test
+    fun threads_deleteRevealed() = snap("2a-threads-delete-revealed", settleMillis = 1_000) {
+        val full = ScreenshotFixtures.threadsState()
+        ThreadsScreen(
+            state = full.copy(
+                revealedDeleteId = full.sections.first().items.first().id,
+            ),
             clock = "09:41", tabs = tabs, onEvent = {},
             onOpenThread = {}, onNewThread = {}, onOpenConfig = {},
         )

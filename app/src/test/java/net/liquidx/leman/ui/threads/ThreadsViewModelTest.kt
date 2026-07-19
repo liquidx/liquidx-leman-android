@@ -3,6 +3,7 @@ package net.liquidx.leman.ui.threads
 import app.cash.turbine.test
 import java.time.ZoneOffset
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import net.liquidx.leman.data.local.ThreadEntity
@@ -153,49 +154,55 @@ class ThreadsViewModelTest {
     }
 
     @Test
-    fun armDelete_marksRowArmedWithoutDeleting() = runTest {
+    fun revealDelete_opensRowWithoutDeleting() = runTest {
         val h = VmHarness(this)
         h.db.threadDao().upsertThread(entity("a", "delete me", lastActiveAt = h.now))
         val vm = vm(h)
         vm.state.test {
             awaitLoaded()
-            vm.onEvent(ThreadsEvent.ArmDelete("a"))
-            val armed = awaitUntil { it.armedDeleteId == "a" }
-            assertEquals(1, armed.totalCount)
+            vm.onEvent(ThreadsEvent.RevealDelete("a"))
+            val revealed = awaitUntil { it.revealedDeleteId == "a" }
+            assertEquals(1, revealed.totalCount)
             assertEquals(0, h.client.deleteCalls.size)
             cancelAndIgnoreRemainingEvents()
         }
         h.close()
     }
 
+    /**
+     * The old arm-then-timeout behaviour is deliberately gone: a revealed button
+     * must not retract itself while the user is reaching for it.
+     */
     @Test
-    fun armDelete_disarmsAfterTimeout() = runTest {
+    fun revealDelete_staysOpenIndefinitely() = runTest {
         val h = VmHarness(this)
         h.db.threadDao().upsertThread(entity("a", "delete me", lastActiveAt = h.now))
         val vm = vm(h)
         vm.state.test {
             awaitLoaded()
-            vm.onEvent(ThreadsEvent.ArmDelete("a"))
-            awaitUntil { it.armedDeleteId == "a" }
+            vm.onEvent(ThreadsEvent.RevealDelete("a"))
+            assertEquals("a", awaitUntil { it.revealedDeleteId == "a" }.revealedDeleteId)
+            advanceTimeBy(60_000)
             advanceUntilIdle()
-            assertEquals(null, awaitUntil { it.armedDeleteId == null }.armedDeleteId)
+            expectNoEvents()
+            assertEquals("a", vm.state.value.revealedDeleteId)
             cancelAndIgnoreRemainingEvents()
         }
         h.close()
     }
 
     @Test
-    fun armDelete_secondRowDisarmsTheFirst() = runTest {
+    fun revealDelete_secondRowClosesTheFirst() = runTest {
         val h = VmHarness(this)
         h.db.threadDao().upsertThread(entity("a", "first", lastActiveAt = h.now))
         h.db.threadDao().upsertThread(entity("b", "second", lastActiveAt = h.now))
         val vm = vm(h)
         vm.state.test {
             awaitLoaded()
-            vm.onEvent(ThreadsEvent.ArmDelete("a"))
-            awaitUntil { it.armedDeleteId == "a" }
-            vm.onEvent(ThreadsEvent.ArmDelete("b"))
-            assertEquals("b", awaitUntil { it.armedDeleteId == "b" }.armedDeleteId)
+            vm.onEvent(ThreadsEvent.RevealDelete("a"))
+            awaitUntil { it.revealedDeleteId == "a" }
+            vm.onEvent(ThreadsEvent.RevealDelete("b"))
+            assertEquals("b", awaitUntil { it.revealedDeleteId == "b" }.revealedDeleteId)
             cancelAndIgnoreRemainingEvents()
         }
         h.close()
@@ -209,12 +216,12 @@ class ThreadsViewModelTest {
         val vm = vm(h)
         vm.state.test {
             awaitLoaded()
-            vm.onEvent(ThreadsEvent.ArmDelete("a"))
-            awaitUntil { it.armedDeleteId == "a" }
+            vm.onEvent(ThreadsEvent.RevealDelete("a"))
+            awaitUntil { it.revealedDeleteId == "a" }
             vm.onEvent(ThreadsEvent.ConfirmDelete("a"))
             val after = awaitUntil { s -> s.sections.flatMap { it.items }.none { it.id == "a" } }
             assertEquals(listOf("b"), after.sections.flatMap { it.items }.map { it.id })
-            assertEquals(null, after.armedDeleteId)
+            assertEquals(null, after.revealedDeleteId)
             assertEquals(listOf("a"), h.client.deleteCalls)
             cancelAndIgnoreRemainingEvents()
         }
@@ -229,47 +236,47 @@ class ThreadsViewModelTest {
         val vm = vm(h)
         vm.state.test {
             awaitLoaded()
-            vm.onEvent(ThreadsEvent.ArmDelete("a"))
-            awaitUntil { it.armedDeleteId == "a" }
+            vm.onEvent(ThreadsEvent.RevealDelete("a"))
+            awaitUntil { it.revealedDeleteId == "a" }
             vm.onEvent(ThreadsEvent.ConfirmDelete("a"))
             val failed = awaitUntil { it.deleteErrorId == "a" }
             assertEquals(listOf("a"), failed.sections.flatMap { it.items }.map { it.id })
-            assertEquals(null, failed.armedDeleteId)
+            assertEquals(null, failed.revealedDeleteId)
             cancelAndIgnoreRemainingEvents()
         }
         h.close()
     }
 
     @Test
-    fun armDelete_clearsAPriorDeleteError() = runTest {
+    fun revealDelete_clearsAPriorDeleteError() = runTest {
         val h = VmHarness(this)
         h.client.deleteSessionResult = ApiResult.Err(ApiError.Network(java.io.IOException("offline")))
         h.db.threadDao().upsertThread(entity("a", "delete me", lastActiveAt = h.now))
         val vm = vm(h)
         vm.state.test {
             awaitLoaded()
-            vm.onEvent(ThreadsEvent.ArmDelete("a"))
-            awaitUntil { it.armedDeleteId == "a" }
+            vm.onEvent(ThreadsEvent.RevealDelete("a"))
+            awaitUntil { it.revealedDeleteId == "a" }
             vm.onEvent(ThreadsEvent.ConfirmDelete("a"))
             awaitUntil { it.deleteErrorId == "a" }
-            vm.onEvent(ThreadsEvent.ArmDelete("a"))
-            assertEquals(null, awaitUntil { it.armedDeleteId == "a" }.deleteErrorId)
+            vm.onEvent(ThreadsEvent.RevealDelete("a"))
+            assertEquals(null, awaitUntil { it.revealedDeleteId == "a" }.deleteErrorId)
             cancelAndIgnoreRemainingEvents()
         }
         h.close()
     }
 
     @Test
-    fun cancelDelete_disarmsImmediately() = runTest {
+    fun hideDelete_closesRow() = runTest {
         val h = VmHarness(this)
         h.db.threadDao().upsertThread(entity("a", "delete me", lastActiveAt = h.now))
         val vm = vm(h)
         vm.state.test {
             awaitLoaded()
-            vm.onEvent(ThreadsEvent.ArmDelete("a"))
-            awaitUntil { it.armedDeleteId == "a" }
-            vm.onEvent(ThreadsEvent.CancelDelete)
-            assertEquals(null, awaitUntil { it.armedDeleteId == null }.armedDeleteId)
+            vm.onEvent(ThreadsEvent.RevealDelete("a"))
+            awaitUntil { it.revealedDeleteId == "a" }
+            vm.onEvent(ThreadsEvent.HideDelete)
+            assertEquals(null, awaitUntil { it.revealedDeleteId == null }.revealedDeleteId)
             assertEquals(0, h.client.deleteCalls.size)
             cancelAndIgnoreRemainingEvents()
         }
