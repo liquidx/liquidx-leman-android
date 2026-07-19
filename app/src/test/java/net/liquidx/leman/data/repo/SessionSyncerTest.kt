@@ -394,8 +394,6 @@ class SessionSyncerTest {
         assertTrue(result is ApiResult.Ok)
         assertEquals(1, changes.size)
         assertEquals("run_x", changes.single().threadId)
-        assertTrue(changes.single().isNewSession)
-        assertEquals(200_000L, changes.single().serverLastActive)
     }
 
     @Test

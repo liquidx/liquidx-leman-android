@@ -19,7 +19,7 @@ class MessageNotifierTest {
     private val nm get() = shadowOf(context.getSystemService(NotificationManager::class.java))
 
     private fun change(id: String) =
-        SyncChange(id, "Title $id", "preview $id", isNewSession = false, serverLastActive = 1L)
+        SyncChange(id, "Title $id", "preview $id")
 
     @Test
     fun post_granted_showsPerChange_andCreatesChannel() {
@@ -33,6 +33,29 @@ class MessageNotifierTest {
         val titles = nm.activeNotifications.map { it.notification.extras.getString("android.title") }
         assertTrue(titles.contains("Title a"))
         assertTrue(titles.contains("Title b"))
+    }
+
+    @Test
+    fun post_multipleChanges_addsGroupSummary() {
+        MessageNotifier(context, permissionGranted = { true })
+            .post(listOf(change("a"), change("b")))
+
+        val summaries = nm.activeNotifications.filter {
+            (it.notification.flags and android.app.Notification.FLAG_GROUP_SUMMARY) != 0
+        }
+        assertEquals("expected exactly one group summary", 1, summaries.size)
+        assertEquals(
+            "2 new messages",
+            summaries.single().notification.extras.getString("android.title"),
+        )
+        // summary + one per thread; the summary id must not collide with a thread id
+        assertEquals(3, nm.activeNotifications.size)
+    }
+
+    @Test
+    fun post_singleChange_hasNoGroupSummary() {
+        MessageNotifier(context, permissionGranted = { true }).post(listOf(change("a")))
+        assertEquals(1, nm.activeNotifications.size)
     }
 
     @Test
