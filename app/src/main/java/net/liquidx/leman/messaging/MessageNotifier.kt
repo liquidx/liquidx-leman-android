@@ -35,26 +35,50 @@ class MessageNotifier(
         if (changes.isEmpty() || !permissionGranted()) return
         ensureChannel()
         val nm = NotificationManagerCompat.from(context)
+        val posted = changes.mapTo(mutableSetOf()) { notificationId(it.threadId) }
         for (c in changes) nm.notify(notificationId(c.threadId), build(c))
-        if (changes.size > 1) nm.notify(SUMMARY_ID, buildSummary(changes.size))
+        // Union with what was already showing: a push carrying one change while
+        // another thread's notification is still up leaves two in the shade, and
+        // sizing the summary off this batch alone would miss it entirely.
+        reconcileSummary(activeThreadIds() + posted)
     }
 
     /**
      * Clears a thread's notification once it's actually been read in-app —
      * `setAutoCancel(true)` alone only clears it on tap, so it otherwise lingers
-     * in the shade after the user reads the thread by any other route. Also
-     * clears the group summary once it's the only one left (getActiveNotifications()
-     * is available at our minSdk, so checking is cheap and race-free enough here —
-     * worst case a stale summary lingers one post() cycle, never a wrong cancel).
+     * in the shade after the user reads the thread by any other route.
      */
     fun cancel(threadId: String) {
-        val nm = context.getSystemService(NotificationManager::class.java)
-        nm.cancel(notificationId(threadId))
-        val anyThreadNotificationsLeft = nm.activeNotifications.any {
-            it.id != SUMMARY_ID && it.notification.group == GROUP
-        }
-        if (!anyThreadNotificationsLeft) nm.cancel(SUMMARY_ID)
+        val id = notificationId(threadId)
+        context.getSystemService(NotificationManager::class.java).cancel(id)
+        reconcileSummary(activeThreadIds() - id)
     }
+
+    /**
+     * Keeps the group summary honest about how many threads are actually showing.
+     * Android only surfaces a summary once a group has two or more children, and a
+     * summary posted earlier keeps its old text forever unless re-posted — so a
+     * count is re-derived from the live set on every post and cancel.
+     *
+     * The caller passes the expected set rather than trusting [activeThreadIds]
+     * alone: NotificationManagerService applies posts and cancels asynchronously,
+     * so a notify/cancel issued moments earlier may not be visible yet.
+     */
+    private fun reconcileSummary(threadIds: Set<Int>) {
+        val nm = NotificationManagerCompat.from(context)
+        if (threadIds.size >= 2) {
+            nm.notify(SUMMARY_ID, buildSummary(threadIds.size))
+        } else {
+            nm.cancel(SUMMARY_ID)
+        }
+    }
+
+    /** Ids of this group's currently-showing per-thread notifications (summary excluded). */
+    private fun activeThreadIds(): Set<Int> =
+        context.getSystemService(NotificationManager::class.java)
+            .activeNotifications
+            .filter { it.id != SUMMARY_ID && it.notification.group == GROUP }
+            .mapTo(mutableSetOf()) { it.id }
 
     // Single source of truth for the id derivation so post/cancel can never drift.
     private fun notificationId(threadId: String) = threadId.hashCode()

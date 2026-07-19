@@ -58,6 +58,36 @@ class MessageNotifierTest {
         assertEquals(1, nm.activeNotifications.size)
     }
 
+    private fun summaryTitle(): String? = nm.activeNotifications
+        .singleOrNull { (it.notification.flags and android.app.Notification.FLAG_GROUP_SUMMARY) != 0 }
+        ?.notification?.extras?.getString("android.title")
+
+    @Test
+    fun successivePosts_summaryCountsAllShowingThreads() {
+        // Two pushes carrying one change each still leave two notifications in the
+        // shade — sizing the summary off a single batch would miss the group.
+        val notifier = MessageNotifier(context, permissionGranted = { true })
+        notifier.post(listOf(change("a")))
+        assertEquals("no summary for a lone notification", null, summaryTitle())
+        notifier.post(listOf(change("b")))
+        assertEquals("2 new messages", summaryTitle())
+    }
+
+    @Test
+    fun cancel_recountsSummary_ratherThanLeavingStaleText() {
+        val notifier = MessageNotifier(context, permissionGranted = { true })
+        notifier.post(listOf(change("a"), change("b"), change("c")))
+        assertEquals("3 new messages", summaryTitle())
+
+        notifier.cancel("a")
+        assertEquals("2 new messages", summaryTitle())
+
+        // Down to one thread: Android only shows a summary for 2+, so it must go.
+        notifier.cancel("b")
+        assertEquals(null, summaryTitle())
+        assertEquals(1, nm.activeNotifications.size)
+    }
+
     @Test
     fun post_denied_showsNothing() {
         MessageNotifier(context, permissionGranted = { false }).post(listOf(change("a")))
