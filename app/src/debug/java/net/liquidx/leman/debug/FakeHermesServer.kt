@@ -176,6 +176,8 @@ class FakeHermesServer : HermesClient {
 
     override suspend fun registerDevice(fcmToken: String, deviceId: String): ApiResult<Unit> = ApiResult.Ok(Unit)
 
+    override suspend fun unregisterDevice(deviceId: String): ApiResult<Unit> = ApiResult.Ok(Unit)
+
     /**
      * Translates [scriptFor]'s run-vocabulary events into the chat vocabulary:
      * `run.started` first, deltas/tool events unchanged (with Streaming's
@@ -312,6 +314,7 @@ class SwitchableHermesClient(
     override suspend fun renameSession(id: String, title: String) = active.renameSession(id, title)
     override suspend fun deleteSession(id: String) = active.deleteSession(id)
     override suspend fun registerDevice(fcmToken: String, deviceId: String) = real.registerDevice(fcmToken, deviceId)
+    override suspend fun unregisterDevice(deviceId: String) = real.unregisterDevice(deviceId)
 
     override fun chatStream(id: String, message: String): Flow<RunEvent> = flow {
         var count = 0

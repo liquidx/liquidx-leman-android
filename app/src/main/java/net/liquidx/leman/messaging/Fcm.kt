@@ -10,3 +10,16 @@ suspend fun fetchFcmToken(): String? = suspendCancellableCoroutine { cont ->
         cont.resume(if (task.isSuccessful) task.result else null)
     }
 }
+
+/**
+ * Deletes the local FCM registration token (opt-out half of the push client).
+ * Best-effort: success and failure both just resume — there is no user-facing
+ * error path for a local token delete.
+ */
+suspend fun deleteFcmToken() {
+    suspendCancellableCoroutine<Unit> { cont ->
+        FirebaseMessaging.getInstance().deleteToken().addOnCompleteListener {
+            cont.resume(Unit)
+        }
+    }
+}

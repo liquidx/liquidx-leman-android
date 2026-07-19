@@ -212,7 +212,10 @@ fun LemanNavHost(
                 onOpenDebug = container.debugHooks?.let { { navController.navigate("debug") { launchSingleTop = true } } },
                 onToggleNotifications = { enabled ->
                     if (!enabled) {
-                        vm.onEvent(net.liquidx.leman.ui.config.ConfigEvent.SetNotificationsEnabled(false))
+                        scope.launch {
+                            vm.setNotificationsEnabled(false)
+                            enqueueUnregister(context)
+                        }
                     } else if (
                         androidx.core.content.ContextCompat.checkSelfPermission(
                             context, android.Manifest.permission.POST_NOTIFICATIONS,
@@ -237,10 +240,28 @@ fun LemanNavHost(
 }
 
 private fun enqueueRegister(context: android.content.Context) {
-    androidx.work.WorkManager.getInstance(context).enqueueUniqueWork(
+    val workManager = androidx.work.WorkManager.getInstance(context)
+    // "register-device" and "unregister-device" are different unique-work names, so a
+    // rapid toggle-off-then-on could otherwise leave both queued in contradictory order.
+    workManager.cancelUniqueWork("unregister-device")
+    workManager.enqueueUniqueWork(
         "register-device",
         androidx.work.ExistingWorkPolicy.REPLACE,
         androidx.work.OneTimeWorkRequestBuilder<net.liquidx.leman.messaging.DeviceRegistrationWorker>()
+            .setConstraints(
+                androidx.work.Constraints.Builder()
+                    .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build(),
+            ).build(),
+    )
+}
+
+private fun enqueueUnregister(context: android.content.Context) {
+    val workManager = androidx.work.WorkManager.getInstance(context)
+    workManager.cancelUniqueWork("register-device")
+    workManager.enqueueUniqueWork(
+        "unregister-device",
+        androidx.work.ExistingWorkPolicy.REPLACE,
+        androidx.work.OneTimeWorkRequestBuilder<net.liquidx.leman.messaging.DeviceUnregistrationWorker>()
             .setConstraints(
                 androidx.work.Constraints.Builder()
                     .setRequiredNetworkType(androidx.work.NetworkType.CONNECTED).build(),

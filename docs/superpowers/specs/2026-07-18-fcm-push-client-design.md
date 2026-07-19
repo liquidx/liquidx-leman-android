@@ -105,7 +105,8 @@ new `cron` session. The notification signal must therefore be derived independen
 - `data/repo/SessionSyncer.kt` — add the optional `collect` callback; emit `SyncChange` on rebuild
   when newest user/agent turn is `agent`.
 - `data/repo/ThreadRepository.kt` — add `syncForNotifications()`.
-- `data/remote/HermesClient.kt` + `OkHttpHermesClient.kt` — add `suspend fun registerDevice(token, deviceId): ApiResult<Unit>`.
+- `data/remote/HermesClient.kt` + `OkHttpHermesClient.kt` — add `suspend fun registerDevice(token, deviceId): ApiResult<Unit>`
+  and `suspend fun unregisterDevice(deviceId): ApiResult<Unit>` (opt-out, `DELETE /api/devices/{id}`).
 - `data/settings/` — add `notificationsEnabled: Boolean`, `deviceId: String` (stable UUID,
   generated once), `hasSeededSync: Boolean`, `notifiedActive: Map<String, Long>`.
 - `di/AppContainer.kt` — add lazy singletons `messageNotifier`, `deviceRegistrar`, `deviceId`.
@@ -127,6 +128,34 @@ Content-Type: application/json
 - Absent endpoint today: `404`/unset URL → log + retry, no crash, no user-facing error.
 - **Not yet server-verified** — to be recorded as an assumption in the gateway-contract memory and
   confirmed when the server project is built.
+
+### De-registration (opt-out half)
+
+Turning the Notifications toggle off does more than persist a flag: it also stops the server from
+pushing and disables local FCM delivery, so `SyncNotifyWorker` isn't woken for a setting the user
+has already switched off.
+
+```
+DELETE {serverUrl}/api/devices/{device_id}
+Authorization: Bearer <HERMES_API_KEY>
+```
+
+- Same `device_id` as registration. `HermesClient.unregisterDevice(deviceId)` sends the request;
+  `DeviceRegistrar.unregister()` treats both a `200` and a `404` (endpoint not built yet) as
+  success-equivalent — a `404` here is expected, not an error, mirroring the registration contract's
+  resilient-no-op stance.
+- Order of operations matters: the server call is attempted **first**, then local delivery is
+  disabled — so a failed de-registration attempt never loses the token before the server has been
+  told about it.
+- Opt-out also flips `FirebaseMessaging.isAutoInitEnabled` back to `false` and deletes the local FCM
+  token (`FirebaseMessaging.deleteToken()`), regardless of whether the server call succeeded — this
+  is what actually stops the device from receiving pushes, independent of server-side state.
+- **Not yet server-verified** — same caveat as registration; the `DELETE /api/devices/{id}` route
+  doesn't exist on the server yet.
+- Wired from the UI toggle via `DeviceUnregistrationWorker` (mirrors `DeviceRegistrationWorker`),
+  enqueued as unique work `"unregister-device"`. Since `"register-device"` and `"unregister-device"`
+  are separate unique-work names, each enqueue cancels the other so a rapid toggle can't leave both
+  queued in a contradictory order.
 
 ## Permissions & settings UI
 

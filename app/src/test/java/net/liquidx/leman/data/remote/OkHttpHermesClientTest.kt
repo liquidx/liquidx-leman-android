@@ -191,4 +191,20 @@ class OkHttpHermesClientTest {
         server.enqueue(MockResponse().setResponseCode(404).setBody("nope"))
         assertTrue(client.registerDevice("t", "d").errorOrNull() is ApiError.Client)
     }
+
+    @Test
+    fun unregisterDevice_deletesContract() = runTest {
+        server.enqueue(MockResponse().setBody("{}"))
+        assertTrue(client.unregisterDevice("dev-uuid") is ApiResult.Ok)
+        val req = server.takeRequest()
+        assertEquals("DELETE", req.method)
+        assertEquals("/api/devices/dev-uuid", req.path)
+        assertEquals("Bearer testkey", req.getHeader("Authorization"))
+    }
+
+    @Test
+    fun unregisterDevice_404_isClient() = runTest {
+        server.enqueue(MockResponse().setResponseCode(404).setBody("nope"))
+        assertTrue(client.unregisterDevice("dev-uuid").errorOrNull() is ApiError.Client)
+    }
 }

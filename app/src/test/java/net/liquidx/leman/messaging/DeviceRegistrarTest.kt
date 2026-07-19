@@ -24,6 +24,8 @@ class DeviceRegistrarTest {
         client: FakeHermesClient,
         key: String? = "k",
         token: String? = "tok",
+        disableAutoInitCalls: MutableList<Unit> = mutableListOf(),
+        deleteTokenCalls: MutableList<Unit> = mutableListOf(),
     ): Pair<DeviceRegistrar, SettingsStore> {
         val dir = File(
             ApplicationProvider.getApplicationContext<android.content.Context>().filesDir,
@@ -31,9 +33,12 @@ class DeviceRegistrarTest {
         )
         val settings = SettingsStore(scope) { File(dir, "settings.preferences_pb") }
         val push = PushPrefsStore(scope) { File(dir, "push.preferences_pb") }
-        // no-op auto-init: no Firebase app is initialized under Robolectric
+        // no-op auto-init + token delete: no Firebase app is initialized under Robolectric
         return DeviceRegistrar(
-            client, settings, FakeApiKeyStore(key), push, enableAutoInit = {},
+            client, settings, FakeApiKeyStore(key), push,
+            enableAutoInit = {},
+            disableAutoInit = { disableAutoInitCalls += Unit },
+            deleteToken = { deleteTokenCalls += Unit },
         ) { token } to settings
     }
 
@@ -81,5 +86,64 @@ class DeviceRegistrarTest {
         settings.update { it.copy(notificationsEnabled = true) }
         assertEquals(DeviceRegistrar.Outcome.GAVE_UP, reg.register())
         assertTrue(client.registerDeviceCalls.isEmpty())
+    }
+
+    @Test
+    fun unregister_ok_isDoneAndDisablesLocally() = runTest {
+        val client = FakeHermesClient()
+        val disableCalls = mutableListOf<Unit>()
+        val deleteCalls = mutableListOf<Unit>()
+        val (reg, _) = registrar(
+            this, client, disableAutoInitCalls = disableCalls, deleteTokenCalls = deleteCalls,
+        )
+        assertEquals(DeviceRegistrar.Outcome.DONE, reg.unregister())
+        assertEquals(1, client.unregisterDeviceCalls.size)
+        assertEquals(1, disableCalls.size)
+        assertEquals(1, deleteCalls.size)
+    }
+
+    @Test
+    fun unregister_missingEndpoint404_isDoneNotError() = runTest {
+        val client = FakeHermesClient().apply {
+            unregisterDeviceResult = ApiResult.Err(ApiError.Client(404, "no route"))
+        }
+        val disableCalls = mutableListOf<Unit>()
+        val deleteCalls = mutableListOf<Unit>()
+        val (reg, _) = registrar(
+            this, client, disableAutoInitCalls = disableCalls, deleteTokenCalls = deleteCalls,
+        )
+        assertEquals(DeviceRegistrar.Outcome.DONE, reg.unregister())
+        assertEquals(1, disableCalls.size)
+        assertEquals(1, deleteCalls.size)
+    }
+
+    @Test
+    fun unregister_networkError_retriesLaterButStillDisablesLocally() = runTest {
+        val client = FakeHermesClient().apply {
+            unregisterDeviceResult = ApiResult.Err(ApiError.Network(IOException("down")))
+        }
+        val disableCalls = mutableListOf<Unit>()
+        val deleteCalls = mutableListOf<Unit>()
+        val (reg, _) = registrar(
+            this, client, disableAutoInitCalls = disableCalls, deleteTokenCalls = deleteCalls,
+        )
+        assertEquals(DeviceRegistrar.Outcome.RETRY_LATER, reg.unregister())
+        assertEquals(1, disableCalls.size)
+        assertEquals(1, deleteCalls.size)
+    }
+
+    @Test
+    fun unregister_otherClientError_givesUpButStillDisablesLocally() = runTest {
+        val client = FakeHermesClient().apply {
+            unregisterDeviceResult = ApiResult.Err(ApiError.Client(400, "bad request"))
+        }
+        val disableCalls = mutableListOf<Unit>()
+        val deleteCalls = mutableListOf<Unit>()
+        val (reg, _) = registrar(
+            this, client, disableAutoInitCalls = disableCalls, deleteTokenCalls = deleteCalls,
+        )
+        assertEquals(DeviceRegistrar.Outcome.GAVE_UP, reg.unregister())
+        assertEquals(1, disableCalls.size)
+        assertEquals(1, deleteCalls.size)
     }
 }

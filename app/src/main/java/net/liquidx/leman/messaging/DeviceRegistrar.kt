@@ -27,6 +27,16 @@ class DeviceRegistrar(
     private val enableAutoInit: () -> Unit = {
         com.google.firebase.messaging.FirebaseMessaging.getInstance().isAutoInitEnabled = true
     },
+    /**
+     * Opt-out half of the injected auto-init pair: turns local delivery back
+     * off. Injected for the same reason as [enableAutoInit] — no initialized
+     * Firebase app under Robolectric.
+     */
+    private val disableAutoInit: () -> Unit = {
+        com.google.firebase.messaging.FirebaseMessaging.getInstance().isAutoInitEnabled = false
+    },
+    /** Deletes the local FCM token on opt-out. Injected to keep tests Firebase-free. */
+    private val deleteToken: suspend () -> Unit = { deleteFcmToken() },
     private val tokenProvider: suspend () -> String?,
 ) {
     enum class Outcome { DONE, RETRY_LATER, GAVE_UP }
@@ -43,5 +53,27 @@ class DeviceRegistrar(
                 else -> Outcome.GAVE_UP
             }
         }
+    }
+
+    /**
+     * Opt-out: tells the server to stop pushing to this device, then disables
+     * local delivery regardless of the network outcome. Order matters — the
+     * server call happens first so we don't drop the token before telling the
+     * server about it. A `404` (endpoint not built yet) counts as [Outcome.DONE],
+     * not an error — see [HermesClient.unregisterDevice].
+     */
+    suspend fun unregister(): Outcome {
+        val deviceId = pushPrefs.deviceId()
+        val outcome = when (val r = client.unregisterDevice(deviceId)) {
+            is ApiResult.Ok -> Outcome.DONE
+            is ApiResult.Err -> when (r.error) {
+                is ApiError.Client -> if (r.error.code == 404) Outcome.DONE else Outcome.GAVE_UP
+                is ApiError.Network, ApiError.Timeout, is ApiError.Server -> Outcome.RETRY_LATER
+                else -> Outcome.GAVE_UP
+            }
+        }
+        disableAutoInit()
+        deleteToken()
+        return outcome
     }
 }

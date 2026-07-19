@@ -26,6 +26,13 @@ interface HermesClient {
     suspend fun registerDevice(fcmToken: String, deviceId: String): ApiResult<Unit>
 
     /**
+     * De-registers this device so the server stops pushing to it (opt-out half
+     * of the FCM push client). A `404` is expected until the server ships the
+     * endpoint — callers treat it as success-equivalent, not an error.
+     */
+    suspend fun unregisterDevice(deviceId: String): ApiResult<Unit>
+
+    /**
      * Cold flow of a Sessions chat run's events (spec 02 §Sessions). Completes
      * normally when the server closes the stream; fails with
      * [HermesStreamException] carrying the mapped

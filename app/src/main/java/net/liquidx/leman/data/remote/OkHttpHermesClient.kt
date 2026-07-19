@@ -159,6 +159,11 @@ class OkHttpHermesClient(
         return execute(t.rest, request) { }
     }
 
+    override suspend fun unregisterDevice(deviceId: String): ApiResult<Unit> {
+        val t = transport ?: return ApiResult.Err(ApiError.NotConfigured)
+        return execute(t.rest, t.request("api/devices/$deviceId").delete().build()) { }
+    }
+
     override fun chatStream(id: String, message: String): Flow<RunEvent> = flow {
         val t = transport ?: throw HermesStreamException(ApiError.NotConfigured)
         val body = HermesJson.encodeToString(ChatRequestDto.serializer(), ChatRequestDto(message))
