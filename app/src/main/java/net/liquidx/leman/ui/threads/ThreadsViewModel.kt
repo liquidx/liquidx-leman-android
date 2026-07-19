@@ -49,18 +49,18 @@ data class ThreadsUiState(
     val runningCount: Int = 0,
     val connState: ConnState = ConnState.NotConfigured,
     val loaded: Boolean = false,
-    /** Row swiped far enough to show "tap to delete"; disarms after 3s. */
-    val armedDeleteId: String? = null,
-    /** Row whose last delete attempt failed; shown inline until re-armed. */
+    /** Row swiped open to expose its delete button. At most one at a time. */
+    val revealedDeleteId: String? = null,
+    /** Row whose last delete attempt failed; shown inline until re-revealed. */
     val deleteErrorId: String? = null,
 )
 
 sealed interface ThreadsEvent {
     data class SetFilter(val query: String) : ThreadsEvent
     data class TogglePin(val threadId: String) : ThreadsEvent
-    data class ArmDelete(val threadId: String) : ThreadsEvent
+    data class RevealDelete(val threadId: String) : ThreadsEvent
     data class ConfirmDelete(val threadId: String) : ThreadsEvent
-    data object CancelDelete : ThreadsEvent
+    data object HideDelete : ThreadsEvent
 }
 
 class ThreadsViewModel(
@@ -79,16 +79,15 @@ class ThreadsViewModel(
 ) : ViewModel() {
 
     private val filter = MutableStateFlow("")
-    private val armedDelete = MutableStateFlow<String?>(null)
+    private val revealedDelete = MutableStateFlow<String?>(null)
     private val deleteError = MutableStateFlow<String?>(null)
-    private var disarmJob: kotlinx.coroutines.Job? = null
 
     val state: StateFlow<ThreadsUiState> = combine(
         repo.observeThreads(),
         filter,
         connectionManager.state,
         tick,
-        combine(armedDelete, deleteError, ::Pair),
+        combine(revealedDelete, deleteError, ::Pair),
     ) { threads, query, conn, _, delete ->
         build(threads, query, conn, delete.first, delete.second)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ThreadsUiState())
@@ -101,24 +100,16 @@ class ThreadsViewModel(
                     .firstOrNull { it.id == event.threadId }?.pinned ?: return@launch
                 repo.setPinned(event.threadId, !current)
             }
-            // Two-tap confirm, matching ConfigViewModel's clear-cache idiom: the
-            // swipe arms, a tap confirms, and 3s of inaction disarms.
-            is ThreadsEvent.ArmDelete -> {
+            // The swipe holds the row open until it's acted on: no timeout, since
+            // auto-closing could retract the button as the user reaches for it.
+            // Revealing one row closes any other, so only one is ever open.
+            is ThreadsEvent.RevealDelete -> {
                 deleteError.value = null
-                armedDelete.value = event.threadId
-                disarmJob?.cancel()
-                disarmJob = viewModelScope.launch {
-                    delay(DISARM_MILLIS)
-                    if (armedDelete.value == event.threadId) armedDelete.value = null
-                }
+                revealedDelete.value = event.threadId
             }
-            is ThreadsEvent.CancelDelete -> {
-                disarmJob?.cancel()
-                armedDelete.value = null
-            }
+            is ThreadsEvent.HideDelete -> revealedDelete.value = null
             is ThreadsEvent.ConfirmDelete -> {
-                disarmJob?.cancel()
-                armedDelete.value = null
+                revealedDelete.value = null
                 viewModelScope.launch {
                     // On success the row disappears via observeThreads; on failure
                     // it stays put and reports inline.
@@ -132,7 +123,7 @@ class ThreadsViewModel(
         threads: List<Thread>,
         query: String,
         conn: ConnState,
-        armedDeleteId: String?,
+        revealedDeleteId: String?,
         deleteErrorId: String?,
     ): ThreadsUiState {
         val now = clock()
@@ -175,7 +166,7 @@ class ThreadsViewModel(
             runningCount = threads.count { it.state == ThreadState.Running },
             connState = conn,
             loaded = true,
-            armedDeleteId = armedDeleteId?.takeIf { id -> threads.any { it.id == id } },
+            revealedDeleteId = revealedDeleteId?.takeIf { id -> threads.any { it.id == id } },
             deleteErrorId = deleteErrorId?.takeIf { id -> threads.any { it.id == id } },
         )
     }
@@ -201,9 +192,5 @@ class ThreadsViewModel(
             timeLabel = if (state == ThreadState.Running) "now" else TimeFormat.timeLabel(lastActiveAt, now, zone),
             sourceLabel = source.takeIf { it != "api_server" },
         )
-    }
-
-    private companion object {
-        const val DISARM_MILLIS = 3_000L
     }
 }

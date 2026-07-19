@@ -6,10 +6,12 @@ import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.node.DelegatableNode
 import androidx.compose.ui.node.DrawModifierNode
@@ -27,7 +29,23 @@ enum class HairlineSide { Top, Bottom, Start, End }
 fun Modifier.hairline(
     side: HairlineSide,
     color: Color = LemanColors.hairline,
-): Modifier = drawBehind {
+): Modifier = drawBehind { drawHairline(side, color) }
+
+/**
+ * [hairline], but painted *over* the content instead of behind it. Needed when a
+ * child draws an opaque background that would otherwise cover the line — e.g. a
+ * row that slides horizontally to uncover an action beneath it, where the
+ * divider belongs to the stationary slot rather than the sliding surface.
+ */
+fun Modifier.hairlineOver(
+    side: HairlineSide,
+    color: Color = LemanColors.hairline,
+): Modifier = drawWithContent {
+    drawContent()
+    drawHairline(side, color)
+}
+
+private fun DrawScope.drawHairline(side: HairlineSide, color: Color) {
     val w = size.width
     val h = size.height
     when (side) {
