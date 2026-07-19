@@ -1,6 +1,8 @@
 package net.liquidx.leman.data.repo
 
 import androidx.room.withTransaction
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import net.liquidx.leman.data.local.LemanDatabase
 import net.liquidx.leman.data.local.ThreadEntity
 import net.liquidx.leman.data.remote.HermesClient
@@ -12,8 +14,6 @@ data class SyncChange(
     val threadId: String,
     val title: String,
     val preview: String,
-    val isNewSession: Boolean,
-    val serverLastActive: Long,
 )
 
 /**
@@ -28,7 +28,14 @@ class SessionSyncer(
     private val isRunActive: (String) -> Boolean,
     private val visibleThreadId: () -> String?,
 ) {
-    suspend fun syncOnce(collect: ((SyncChange) -> Unit)? = null): ApiResult<Unit> {
+    // Two callers now race: the 30s foreground SyncScheduler loop and SyncNotifyWorker
+    // (FCM). The orphan reap below deletes local threads absent from *this* call's
+    // serverIds snapshot, so an interleaved stale snapshot could delete a thread the
+    // other call just upserted — taking its unsent turns with it. Nothing inside
+    // syncOnce re-enters syncOnce, so this cannot deadlock.
+    private val mutex = Mutex()
+
+    suspend fun syncOnce(collect: ((SyncChange) -> Unit)? = null): ApiResult<Unit> = mutex.withLock {
         val sessions = mutableListOf<SessionDto>()
         var offset = 0
         while (true) {
@@ -98,8 +105,6 @@ class SessionSyncer(
                             threadId = session.id,
                             title = rebuilt.title,
                             preview = rebuilt.preview,
-                            isNewSession = local == null,
-                            serverLastActive = lastActiveMs,
                         ),
                     )
                 }
@@ -123,7 +128,7 @@ class SessionSyncer(
                 }
             }
         }
-        return ApiResult.Ok(Unit)
+        ApiResult.Ok(Unit)
     }
 
     private companion object {

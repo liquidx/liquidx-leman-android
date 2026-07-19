@@ -38,6 +38,10 @@ class PushPrefsStore(
         store.data.first()[Keys.deviceId]?.let { return it }
         val fresh = UUID.randomUUID().toString()
         var result = fresh
+        // The re-check inside edit{} is load-bearing, not redundant: edit{} serializes
+        // writes, so two concurrent callers that both missed the read above would
+        // otherwise each mint (and the second overwrite with) a different UUID —
+        // handing the gateway two device rows for one install. Do not "simplify".
         store.edit { p -> result = p[Keys.deviceId] ?: fresh.also { p[Keys.deviceId] = it } }
         return result
     }
@@ -46,5 +50,14 @@ class PushPrefsStore(
 
     suspend fun markSeeded() {
         store.edit { it[Keys.hasSeeded] = true }
+    }
+
+    /**
+     * Re-arms the first-sync seed guard. Called when the local thread table is
+     * wiped: without this, the next push treats every server session as new and
+     * posts one notification per thread.
+     */
+    suspend fun clearSeeded() {
+        store.edit { it.remove(Keys.hasSeeded) }
     }
 }

@@ -1,6 +1,8 @@
 package net.liquidx.leman
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -10,6 +12,8 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import net.liquidx.leman.ui.nav.LemanNavHost
 import net.liquidx.leman.ui.theme.LemanTheme
 
@@ -24,7 +28,20 @@ class MainActivity : FragmentActivity() {
         // Health probe on STARTED so the status row settles fast (spec 04).
         lifecycle.addObserver(
             LifecycleEventObserver { _, event ->
-                if (event == Lifecycle.Event.ON_START) container.connectionManager.reconfigure()
+                if (event != Lifecycle.Event.ON_START) return@LifecycleEventObserver
+                container.connectionManager.reconfigure()
+                // The user can revoke POST_NOTIFICATIONS from system settings while
+                // we're backgrounded; reflect the true state so the toggle can't read
+                // ON while nothing is ever delivered.
+                container.appScope.launch {
+                    val revoked = ContextCompat.checkSelfPermission(
+                        this@MainActivity,
+                        Manifest.permission.POST_NOTIFICATIONS,
+                    ) != PackageManager.PERMISSION_GRANTED
+                    if (revoked && container.settings.settings.first().notificationsEnabled) {
+                        container.settings.update { it.copy(notificationsEnabled = false) }
+                    }
+                }
             },
         )
 

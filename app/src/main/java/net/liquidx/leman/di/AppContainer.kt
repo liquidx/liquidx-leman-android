@@ -119,6 +119,7 @@ class AppContainer(
             client = hermesClient,
             scope = appScope,
             onAuthFailure = { code -> connectionManager.onAuthFailure(code) },
+            pushPrefs = pushPrefs,
         )
     }
 

@@ -39,6 +39,15 @@ class PushPrefsStoreTest {
     }
 
     @Test
+    fun clearSeeded_reArmsTheGuard() = runTest {
+        val store = newStore(this)
+        store.markSeeded()
+        assertTrue(store.hasSeeded())
+        store.clearSeeded()
+        assertFalse(store.hasSeeded())
+    }
+
+    @Test
     fun values_persistAcrossStoreInstances() = runTest {
         // Create a shared directory so both stores point to the same file
         val sharedDir = File(

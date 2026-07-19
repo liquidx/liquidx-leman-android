@@ -58,7 +58,9 @@ class ThreadRepositoryTest {
      * (backgroundScope tasks are not driven by advanceUntilIdle; Room's default
      * executors are real threads).
      */
-    private fun kotlinx.coroutines.test.TestScope.repo(): ThreadRepository {
+    private fun kotlinx.coroutines.test.TestScope.repo(
+        pushPrefs: net.liquidx.leman.data.settings.PushPrefsStore? = null,
+    ): ThreadRepository {
         val dispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler)
         db = Room.inMemoryDatabaseBuilder(
             ApplicationProvider.getApplicationContext(),
@@ -77,6 +79,7 @@ class ThreadRepositoryTest {
             newId = { "id-${id++}" },
             backoffFactory = { Backoff(random = Random(1)) },
             onAuthFailure = { authFailures++ },
+            pushPrefs = pushPrefs,
         )
     }
 
@@ -744,6 +747,24 @@ class ThreadRepositoryTest {
         advanceUntilIdle()
         repo.clearAll()
         assertEquals(0, repo.observeThreads().first().size)
+    }
+
+    @Test
+    fun clearAll_reArmsPushSeedGuard() = runTest {
+        // Otherwise the next push sees every server session as new and posts one
+        // notification per thread — the flood the seed guard exists to prevent.
+        val push = net.liquidx.leman.data.settings.PushPrefsStore(this) {
+            java.io.File(
+                ApplicationProvider.getApplicationContext<android.content.Context>().filesDir,
+                "clearall-${System.nanoTime()}/push.preferences_pb",
+            )
+        }
+        push.markSeeded()
+        assertTrue(push.hasSeeded())
+
+        repo(pushPrefs = push).clearAll()
+
+        assertEquals(false, push.hasSeeded())
     }
 
     @Test

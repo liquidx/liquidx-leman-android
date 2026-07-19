@@ -22,9 +22,13 @@ import net.liquidx.leman.data.repo.SyncChange
  */
 class MessageNotifier(
     private val context: Context,
+    // The runtime grant alone isn't enough: the user can leave POST_NOTIFICATIONS
+    // granted and still switch the app (or its channel) off in system settings, in
+    // which case nothing is ever delivered. Both must hold.
     private val permissionGranted: () -> Boolean = {
         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
-            PackageManager.PERMISSION_GRANTED
+            PackageManager.PERMISSION_GRANTED &&
+            NotificationManagerCompat.from(context).areNotificationsEnabled()
     },
 ) {
     fun post(changes: List<SyncChange>) {
@@ -74,6 +78,8 @@ class MessageNotifier(
     companion object {
         const val CHANNEL_ID = "new_messages"
         private const val GROUP = "net.liquidx.leman.NEW_MESSAGES"
-        private const val SUMMARY_ID = -1
+        // Per-thread ids are threadId.hashCode(); MIN_VALUE is the one Int no
+        // String hash can produce, so the summary can never clobber a thread.
+        private const val SUMMARY_ID = Int.MIN_VALUE
     }
 }

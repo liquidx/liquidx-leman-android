@@ -26,6 +26,7 @@ import net.liquidx.leman.data.local.encodeTrace
 import net.liquidx.leman.data.local.toDomain
 import net.liquidx.leman.data.remote.HermesClient
 import net.liquidx.leman.data.remote.HermesStreamException
+import net.liquidx.leman.data.settings.PushPrefsStore
 import net.liquidx.leman.domain.composeTrace
 import net.liquidx.leman.domain.model.AgentProfile
 import net.liquidx.leman.domain.model.ApiError
@@ -57,6 +58,7 @@ class ThreadRepository(
     private val newId: () -> String = { UUID.randomUUID().toString() },
     private val backoffFactory: () -> Backoff = { Backoff() },
     private val onAuthFailure: (Int) -> Unit = {},
+    private val pushPrefs: PushPrefsStore? = null,
 ) {
     private val threadDao get() = db.threadDao()
     private val turnDao get() = db.turnDao()
@@ -256,6 +258,9 @@ class ThreadRepository(
         activeRuns.clear()
         _streaming.value = emptyMap()
         threadDao.clearAllThreads()
+        // Re-arm the seed guard: every server session now looks new to the next
+        // sync, and without this the next push would notify for all of them.
+        pushPrefs?.clearSeeded()
     }
 
     /** Local store → share-sheet JSON; the app is the only place this data exists (spec 03). */
