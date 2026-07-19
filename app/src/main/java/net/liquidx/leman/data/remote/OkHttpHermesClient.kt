@@ -148,7 +148,7 @@ class OkHttpHermesClient(
         val t = transport ?: return ApiResult.Err(ApiError.NotConfigured)
         val body = HermesJson.encodeToString(
             DeviceRegistrationDto.serializer(),
-            DeviceRegistrationDto(fcmToken, deviceId),
+            DeviceRegistrationDto(fcmToken, deviceId, "android"),
         )
         val request = t.request("api/devices").post(body.toRequestBody(jsonMediaType)).build()
         return execute(t.rest, request) { }
