@@ -30,8 +30,17 @@ class MainActivity : FragmentActivity() {
 
         setContent {
             LemanTheme {
+                val navController = androidx.navigation.compose.rememberNavController()
+                androidx.compose.runtime.DisposableEffect(navController) {
+                    val listener = androidx.core.util.Consumer<Intent> { intent ->
+                        navController.handleDeepLink(intent)
+                    }
+                    addOnNewIntentListener(listener)
+                    onDispose { removeOnNewIntentListener(listener) }
+                }
                 LemanNavHost(
                     container = container,
+                    navController = navController,
                     onRevealKey = ::authenticateThen,
                     onShareExport = ::shareExport,
                 )
