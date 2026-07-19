@@ -6,6 +6,8 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import net.liquidx.leman.data.local.ThreadEntity
+import net.liquidx.leman.domain.model.ApiError
+import net.liquidx.leman.domain.model.ApiResult
 import net.liquidx.leman.testutil.MainDispatcherRule
 import net.liquidx.leman.testutil.VmHarness
 import org.junit.Assert.assertEquals
@@ -145,6 +147,130 @@ class ThreadsViewModelTest {
             vm.onEvent(ThreadsEvent.TogglePin("a"))
             val pinned = awaitUntil { s -> s.sections.any { it.key == "PINNED" } }
             assertTrue(pinned.sections.first().items.single().pinned)
+            cancelAndIgnoreRemainingEvents()
+        }
+        h.close()
+    }
+
+    @Test
+    fun armDelete_marksRowArmedWithoutDeleting() = runTest {
+        val h = VmHarness(this)
+        h.db.threadDao().upsertThread(entity("a", "delete me", lastActiveAt = h.now))
+        val vm = vm(h)
+        vm.state.test {
+            awaitLoaded()
+            vm.onEvent(ThreadsEvent.ArmDelete("a"))
+            val armed = awaitUntil { it.armedDeleteId == "a" }
+            assertEquals(1, armed.totalCount)
+            assertEquals(0, h.client.deleteCalls.size)
+            cancelAndIgnoreRemainingEvents()
+        }
+        h.close()
+    }
+
+    @Test
+    fun armDelete_disarmsAfterTimeout() = runTest {
+        val h = VmHarness(this)
+        h.db.threadDao().upsertThread(entity("a", "delete me", lastActiveAt = h.now))
+        val vm = vm(h)
+        vm.state.test {
+            awaitLoaded()
+            vm.onEvent(ThreadsEvent.ArmDelete("a"))
+            awaitUntil { it.armedDeleteId == "a" }
+            advanceUntilIdle()
+            assertEquals(null, awaitUntil { it.armedDeleteId == null }.armedDeleteId)
+            cancelAndIgnoreRemainingEvents()
+        }
+        h.close()
+    }
+
+    @Test
+    fun armDelete_secondRowDisarmsTheFirst() = runTest {
+        val h = VmHarness(this)
+        h.db.threadDao().upsertThread(entity("a", "first", lastActiveAt = h.now))
+        h.db.threadDao().upsertThread(entity("b", "second", lastActiveAt = h.now))
+        val vm = vm(h)
+        vm.state.test {
+            awaitLoaded()
+            vm.onEvent(ThreadsEvent.ArmDelete("a"))
+            awaitUntil { it.armedDeleteId == "a" }
+            vm.onEvent(ThreadsEvent.ArmDelete("b"))
+            assertEquals("b", awaitUntil { it.armedDeleteId == "b" }.armedDeleteId)
+            cancelAndIgnoreRemainingEvents()
+        }
+        h.close()
+    }
+
+    @Test
+    fun confirmDelete_removesThreadAndCallsServer() = runTest {
+        val h = VmHarness(this)
+        h.db.threadDao().upsertThread(entity("a", "delete me", lastActiveAt = h.now))
+        h.db.threadDao().upsertThread(entity("b", "keep me", lastActiveAt = h.now))
+        val vm = vm(h)
+        vm.state.test {
+            awaitLoaded()
+            vm.onEvent(ThreadsEvent.ArmDelete("a"))
+            awaitUntil { it.armedDeleteId == "a" }
+            vm.onEvent(ThreadsEvent.ConfirmDelete("a"))
+            val after = awaitUntil { s -> s.sections.flatMap { it.items }.none { it.id == "a" } }
+            assertEquals(listOf("b"), after.sections.flatMap { it.items }.map { it.id })
+            assertEquals(null, after.armedDeleteId)
+            assertEquals(listOf("a"), h.client.deleteCalls)
+            cancelAndIgnoreRemainingEvents()
+        }
+        h.close()
+    }
+
+    @Test
+    fun confirmDelete_networkFailure_keepsRowAndSurfacesError() = runTest {
+        val h = VmHarness(this)
+        h.client.deleteSessionResult = ApiResult.Err(ApiError.Network(java.io.IOException("offline")))
+        h.db.threadDao().upsertThread(entity("a", "delete me", lastActiveAt = h.now))
+        val vm = vm(h)
+        vm.state.test {
+            awaitLoaded()
+            vm.onEvent(ThreadsEvent.ArmDelete("a"))
+            awaitUntil { it.armedDeleteId == "a" }
+            vm.onEvent(ThreadsEvent.ConfirmDelete("a"))
+            val failed = awaitUntil { it.deleteErrorId == "a" }
+            assertEquals(listOf("a"), failed.sections.flatMap { it.items }.map { it.id })
+            assertEquals(null, failed.armedDeleteId)
+            cancelAndIgnoreRemainingEvents()
+        }
+        h.close()
+    }
+
+    @Test
+    fun armDelete_clearsAPriorDeleteError() = runTest {
+        val h = VmHarness(this)
+        h.client.deleteSessionResult = ApiResult.Err(ApiError.Network(java.io.IOException("offline")))
+        h.db.threadDao().upsertThread(entity("a", "delete me", lastActiveAt = h.now))
+        val vm = vm(h)
+        vm.state.test {
+            awaitLoaded()
+            vm.onEvent(ThreadsEvent.ArmDelete("a"))
+            awaitUntil { it.armedDeleteId == "a" }
+            vm.onEvent(ThreadsEvent.ConfirmDelete("a"))
+            awaitUntil { it.deleteErrorId == "a" }
+            vm.onEvent(ThreadsEvent.ArmDelete("a"))
+            assertEquals(null, awaitUntil { it.armedDeleteId == "a" }.deleteErrorId)
+            cancelAndIgnoreRemainingEvents()
+        }
+        h.close()
+    }
+
+    @Test
+    fun cancelDelete_disarmsImmediately() = runTest {
+        val h = VmHarness(this)
+        h.db.threadDao().upsertThread(entity("a", "delete me", lastActiveAt = h.now))
+        val vm = vm(h)
+        vm.state.test {
+            awaitLoaded()
+            vm.onEvent(ThreadsEvent.ArmDelete("a"))
+            awaitUntil { it.armedDeleteId == "a" }
+            vm.onEvent(ThreadsEvent.CancelDelete)
+            assertEquals(null, awaitUntil { it.armedDeleteId == null }.armedDeleteId)
+            assertEquals(0, h.client.deleteCalls.size)
             cancelAndIgnoreRemainingEvents()
         }
         h.close()

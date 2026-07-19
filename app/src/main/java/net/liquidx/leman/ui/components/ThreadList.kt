@@ -7,6 +7,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,6 +24,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.semantics.contentDescription
@@ -40,6 +43,9 @@ import net.liquidx.leman.ui.theme.glow
 import net.liquidx.leman.ui.theme.hairline
 
 enum class DotStyle { Running, NeedsYou, Hollow, Failed }
+
+/** Leftward drag distance that arms a row's delete. */
+private val SWIPE_ARM_THRESHOLD = 72.dp
 
 /** 9dp status dot (spec 06): running pulses; hollow = 1px faint ring. */
 @Composable
@@ -118,13 +124,28 @@ fun ThreadRow(
     onTogglePin: () -> Unit,
     modifier: Modifier = Modifier,
     sourceLabel: String? = null,
+    deleteArmed: Boolean = false,
+    deleteFailed: Boolean = false,
+    onSwipeToDelete: () -> Unit = {},
+    onConfirmDelete: () -> Unit = {},
 ) {
+    // Swipe left past a threshold arms the delete; the row itself never holds an
+    // offset, so the list stays keyed and free of per-row open/closed state.
+    val swipeThresholdPx = with(LocalDensity.current) { SWIPE_ARM_THRESHOLD.toPx() }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
             .hairline(HairlineSide.Bottom, LemanColors.hairlineFaint)
-            .clickable(onClick = onOpen)
+            .pointerInput(swipeThresholdPx) {
+                var dragged = 0f
+                detectHorizontalDragGestures(
+                    onDragStart = { dragged = 0f },
+                    onDragEnd = { if (dragged <= -swipeThresholdPx) onSwipeToDelete() },
+                    onDragCancel = { dragged = 0f },
+                ) { _, delta -> dragged += delta }
+            }
+            .clickable(onClick = if (deleteArmed) onConfirmDelete else onOpen)
             .padding(start = 18.dp, top = 13.dp, bottom = 13.dp),
     ) {
         StatusDot(dot, description = stateLabel)
@@ -156,12 +177,27 @@ fun ThreadRow(
                 modifier = Modifier.padding(top = 2.dp),
             )
             Row(modifier = Modifier.padding(top = 3.dp)) {
-                if (sourceLabel != null) {
-                    Text("$sourceLabel · ", style = LemanType.meta, color = LemanColors.textFaint)
+                when {
+                    deleteArmed -> Text(
+                        "tap to delete",
+                        style = LemanType.meta,
+                        color = LemanColors.danger,
+                        modifier = Modifier.semantics { contentDescription = "tap to delete" },
+                    )
+                    deleteFailed -> Text(
+                        "delete failed · tap row to retry",
+                        style = LemanType.meta,
+                        color = LemanColors.danger,
+                    )
+                    else -> {
+                        if (sourceLabel != null) {
+                            Text("$sourceLabel · ", style = LemanType.meta, color = LemanColors.textFaint)
+                        }
+                        Text("▪ ", style = LemanType.meta, color = stateColor)
+                        Text(stateLabel, style = LemanType.meta, color = stateColor)
+                        Text(" · $timeLabel", style = LemanType.meta, color = LemanColors.textFaint)
+                    }
                 }
-                Text("▪ ", style = LemanType.meta, color = stateColor)
-                Text(stateLabel, style = LemanType.meta, color = stateColor)
-                Text(" · $timeLabel", style = LemanType.meta, color = LemanColors.textFaint)
             }
         }
         Box(
