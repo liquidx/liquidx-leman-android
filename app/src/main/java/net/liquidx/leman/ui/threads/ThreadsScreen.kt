@@ -127,6 +127,10 @@ fun ThreadsScreen(
                         onOpen = { onOpenThread(item.id) },
                         onTogglePin = { onEvent(ThreadsEvent.TogglePin(item.id)) },
                         sourceLabel = item.sourceLabel,
+                        deleteArmed = state.armedDeleteId == item.id,
+                        deleteFailed = state.deleteErrorId == item.id,
+                        onSwipeToDelete = { onEvent(ThreadsEvent.ArmDelete(item.id)) },
+                        onConfirmDelete = { onEvent(ThreadsEvent.ConfirmDelete(item.id)) },
                     )
                 }
             }
