@@ -3,6 +3,7 @@ package net.liquidx.leman.messaging
 import android.app.NotificationManager
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import net.liquidx.leman.MainActivity
 import net.liquidx.leman.data.repo.SyncChange
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -44,5 +45,23 @@ class MessageNotifierTest {
     fun post_empty_noop() {
         MessageNotifier(context, permissionGranted = { true }).post(emptyList())
         assertEquals(0, nm.activeNotifications.size)
+    }
+
+    @Test
+    fun post_granted_notificationTapDeeplinkToThread() {
+        val notifier = MessageNotifier(context, permissionGranted = { true })
+        notifier.post(listOf(change("t1")))
+
+        val statusBarNotification = nm.activeNotifications.find {
+            it.notification.extras.getString("android.title") == "Title t1"
+        }
+        assertTrue("Expected notification for t1", statusBarNotification != null)
+
+        val contentIntent = statusBarNotification!!.notification.contentIntent
+        val shadowPI = shadowOf(contentIntent)
+        val intent = shadowPI.savedIntent
+
+        assertEquals("Deep-link URI should be leman://thread/t1", "leman://thread/t1", intent.data.toString())
+        assertEquals("Target should be MainActivity", MainActivity::class.java.name, intent.component?.className)
     }
 }
