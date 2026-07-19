@@ -35,16 +35,36 @@ class MessageNotifier(
         if (changes.isEmpty() || !permissionGranted()) return
         ensureChannel()
         val nm = NotificationManagerCompat.from(context)
-        for (c in changes) nm.notify(c.threadId.hashCode(), build(c))
+        for (c in changes) nm.notify(notificationId(c.threadId), build(c))
         if (changes.size > 1) nm.notify(SUMMARY_ID, buildSummary(changes.size))
     }
+
+    /**
+     * Clears a thread's notification once it's actually been read in-app —
+     * `setAutoCancel(true)` alone only clears it on tap, so it otherwise lingers
+     * in the shade after the user reads the thread by any other route. Also
+     * clears the group summary once it's the only one left (getActiveNotifications()
+     * is available at our minSdk, so checking is cheap and race-free enough here —
+     * worst case a stale summary lingers one post() cycle, never a wrong cancel).
+     */
+    fun cancel(threadId: String) {
+        val nm = context.getSystemService(NotificationManager::class.java)
+        nm.cancel(notificationId(threadId))
+        val anyThreadNotificationsLeft = nm.activeNotifications.any {
+            it.id != SUMMARY_ID && it.notification.group == GROUP
+        }
+        if (!anyThreadNotificationsLeft) nm.cancel(SUMMARY_ID)
+    }
+
+    // Single source of truth for the id derivation so post/cancel can never drift.
+    private fun notificationId(threadId: String) = threadId.hashCode()
 
     private fun build(c: SyncChange): android.app.Notification {
         val intent = Intent(Intent.ACTION_VIEW, "leman://thread/${c.threadId}".toUri())
             .setClass(context, MainActivity::class.java)
         val pi = PendingIntent.getActivity(
             context,
-            c.threadId.hashCode(),
+            notificationId(c.threadId),
             intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )

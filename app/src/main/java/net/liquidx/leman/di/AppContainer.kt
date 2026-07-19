@@ -120,6 +120,10 @@ class AppContainer(
             scope = appScope,
             onAuthFailure = { code -> connectionManager.onAuthFailure(code) },
             pushPrefs = pushPrefs,
+            // messageNotifier is captured by reference (it's `by lazy`), so this is
+            // safe even though threadRepository is constructed first in the graph —
+            // the lambda only resolves messageNotifier when markRead actually fires.
+            onThreadRead = { threadId -> messageNotifier.cancel(threadId) },
         )
     }
 

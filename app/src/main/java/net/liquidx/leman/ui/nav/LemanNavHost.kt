@@ -1,6 +1,7 @@
 package net.liquidx.leman.ui.nav
 
 import android.content.Intent
+import android.provider.Settings
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.tween
@@ -11,7 +12,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.app.ActivityCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.createSavedStateHandle
@@ -180,13 +183,28 @@ fun LemanNavHost(
             )
             val state by vm.state.collectAsStateWithLifecycle()
             val scope = androidx.compose.runtime.rememberCoroutineScope()
+            val activity = LocalContext.current as? android.app.Activity
+            var notificationsBlocked by remember { mutableStateOf(false) }
             val notifPermission = androidx.activity.compose.rememberLauncherForActivityResult(
                 androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
             ) { granted ->
                 // Enqueue only after the write lands — DeviceRegistrar re-reads it.
                 scope.launch {
                     vm.setNotificationsEnabled(granted)
-                    if (granted) enqueueRegister(context)
+                    if (granted) {
+                        notificationsBlocked = false
+                        enqueueRegister(context)
+                    } else {
+                        // After a denial, shouldShowRequestPermissionRationale flips to
+                        // false once Android will no longer show the system prompt again
+                        // ("don't ask again" or a second denial) — that's the permanently
+                        // blocked state the toggle otherwise silently no-ops in.
+                        notificationsBlocked = activity?.let {
+                            !ActivityCompat.shouldShowRequestPermissionRationale(
+                                it, android.Manifest.permission.POST_NOTIFICATIONS,
+                            )
+                        } ?: false
+                    }
                 }
             }
             ConfigScreen(
@@ -227,6 +245,15 @@ fun LemanNavHost(
                         }
                     } else {
                         notifPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                },
+                notificationsBlocked = notificationsBlocked,
+                onOpenNotificationSettings = {
+                    runCatching {
+                        context.startActivity(
+                            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName),
+                        )
                     }
                 },
                 serverUrlState = vm.serverUrlState,

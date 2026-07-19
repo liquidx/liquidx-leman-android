@@ -51,6 +51,8 @@ fun ConfigScreen(
     onSelectTab: (LemanTab) -> Unit = {},
     onOpenDebug: (() -> Unit)? = null,
     onToggleNotifications: (Boolean) -> Unit = { onEvent(ConfigEvent.SetNotificationsEnabled(it)) },
+    notificationsBlocked: Boolean = false,
+    onOpenNotificationSettings: () -> Unit = {},
     serverUrlState: TextFieldState = rememberTextFieldState(),
     apiKeyState: TextFieldState = rememberTextFieldState(),
     agentNameState: TextFieldState = rememberTextFieldState(),
@@ -189,6 +191,13 @@ fun ConfigScreen(
             SectionHeader("notifications")
             ToggleRow("notify on new messages", state.settings.notificationsEnabled, onToggleNotifications)
             Caption("pushes wake the app to check for new agent replies")
+            if (notificationsBlocked) {
+                Caption(
+                    "blocked in system settings · tap to open",
+                    danger = true,
+                    onClick = onOpenNotificationSettings,
+                )
+            }
             SectionGap()
 
             // ---- DATA ------------------------------------------------------
@@ -242,12 +251,14 @@ private fun FieldLabel(text: String) {
 }
 
 @Composable
-private fun Caption(text: String, danger: Boolean = false) {
+private fun Caption(text: String, danger: Boolean = false, onClick: (() -> Unit)? = null) {
     Text(
         text,
         style = LemanType.meta,
         color = if (danger) LemanColors.danger else LemanColors.textFaint,
-        modifier = Modifier.padding(horizontal = 18.dp, vertical = 4.dp),
+        modifier = Modifier
+            .padding(horizontal = 18.dp, vertical = 4.dp)
+            .let { if (onClick != null) it.clickable(onClick = onClick) else it },
     )
 }
 

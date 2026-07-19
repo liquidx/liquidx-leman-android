@@ -59,6 +59,10 @@ class ThreadRepository(
     private val backoffFactory: () -> Backoff = { Backoff() },
     private val onAuthFailure: (Int) -> Unit = {},
     private val pushPrefs: PushPrefsStore? = null,
+    // Notifies the messaging layer that a thread was read in-app, so it can clear
+    // any lingering notification — kept as an injected seam rather than a direct
+    // dependency so this repo layer doesn't reach up into messaging/UI (spec 01).
+    private val onThreadRead: (String) -> Unit = {},
 ) {
     private val threadDao get() = db.threadDao()
     private val turnDao get() = db.turnDao()
@@ -224,6 +228,7 @@ class ThreadRepository(
             val latestTurnAt = turnDao.getTurns(threadId).maxOfOrNull { it.createdAt } ?: clock()
             threadDao.upsertThread(thread.copy(unread = false, lastReadAt = latestTurnAt))
         }
+        onThreadRead(threadId)
     }
 
     /** Propagates to the server first; local state only changes on success (spec §4). */

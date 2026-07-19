@@ -71,6 +71,41 @@ class MessageNotifierTest {
     }
 
     @Test
+    fun cancel_clearsThatThreadsNotification() {
+        val notifier = MessageNotifier(context, permissionGranted = { true })
+        notifier.post(listOf(change("a")))
+        assertEquals(1, nm.activeNotifications.size)
+
+        notifier.cancel("a")
+
+        assertEquals(0, nm.activeNotifications.size)
+    }
+
+    @Test
+    fun cancel_usesSameIdDerivationAsPost_leavesOtherThreadsAlone() {
+        val notifier = MessageNotifier(context, permissionGranted = { true })
+        notifier.post(listOf(change("a"), change("b")))
+
+        notifier.cancel("a")
+
+        val titles = nm.activeNotifications.map { it.notification.extras.getString("android.title") }
+        assertTrue("thread b's notification should survive", titles.contains("Title b"))
+        assertTrue("thread a's notification should be gone", !titles.contains("Title a"))
+    }
+
+    @Test
+    fun cancel_lastThreadNotification_alsoClearsGroupSummary() {
+        val notifier = MessageNotifier(context, permissionGranted = { true })
+        notifier.post(listOf(change("a"), change("b")))
+        assertEquals(3, nm.activeNotifications.size) // 2 threads + summary
+
+        notifier.cancel("a")
+        notifier.cancel("b")
+
+        assertEquals(0, nm.activeNotifications.size)
+    }
+
+    @Test
     fun post_granted_notificationTapDeeplinkToThread() {
         val notifier = MessageNotifier(context, permissionGranted = { true })
         notifier.post(listOf(change("t1")))

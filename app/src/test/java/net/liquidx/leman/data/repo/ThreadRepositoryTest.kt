@@ -60,6 +60,7 @@ class ThreadRepositoryTest {
      */
     private fun kotlinx.coroutines.test.TestScope.repo(
         pushPrefs: net.liquidx.leman.data.settings.PushPrefsStore? = null,
+        onThreadRead: (String) -> Unit = {},
     ): ThreadRepository {
         val dispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler)
         db = Room.inMemoryDatabaseBuilder(
@@ -80,6 +81,7 @@ class ThreadRepositoryTest {
             backoffFactory = { Backoff(random = Random(1)) },
             onAuthFailure = { authFailures++ },
             pushPrefs = pushPrefs,
+            onThreadRead = onThreadRead,
         )
     }
 
@@ -734,6 +736,17 @@ class ThreadRepositoryTest {
         seedThread("s1", state = "idle")
         repo.markRead("s1")
         assertEquals(now, repo.observeThreads().first().single().lastReadAt)
+    }
+
+    @Test
+    fun markRead_invokesOnThreadReadCallback_withThreadId() = runTest {
+        val readThreadIds = mutableListOf<String>()
+        val repo = repo(onThreadRead = { readThreadIds += it })
+        seedThread("s1", state = "idle")
+
+        repo.markRead("s1")
+
+        assertEquals(listOf("s1"), readThreadIds)
     }
 
     @Test
