@@ -82,6 +82,8 @@ dependencies {
     ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.biometric)
+    // Upgrades the fragment version biometric 1.1.0 pins — see libs.versions.toml.
+    implementation(libs.androidx.fragment)
     implementation(libs.commonmark)
     implementation(libs.commonmark.ext.gfm.tables)
     implementation(libs.commonmark.ext.gfm.strikethrough)
