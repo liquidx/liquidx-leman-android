@@ -183,8 +183,11 @@ fun LemanNavHost(
             val notifPermission = androidx.activity.compose.rememberLauncherForActivityResult(
                 androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
             ) { granted ->
-                vm.onEvent(net.liquidx.leman.ui.config.ConfigEvent.SetNotificationsEnabled(granted))
-                if (granted) enqueueRegister(context)
+                // Enqueue only after the write lands — DeviceRegistrar re-reads it.
+                scope.launch {
+                    vm.setNotificationsEnabled(granted)
+                    if (granted) enqueueRegister(context)
+                }
             }
             ConfigScreen(
                 state = state,
@@ -215,8 +218,10 @@ fun LemanNavHost(
                             context, android.Manifest.permission.POST_NOTIFICATIONS,
                         ) == android.content.pm.PackageManager.PERMISSION_GRANTED
                     ) {
-                        vm.onEvent(net.liquidx.leman.ui.config.ConfigEvent.SetNotificationsEnabled(true))
-                        enqueueRegister(context)
+                        scope.launch {
+                            vm.setNotificationsEnabled(true)
+                            enqueueRegister(context)
+                        }
                     } else {
                         notifPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
                     }

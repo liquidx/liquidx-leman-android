@@ -206,6 +206,16 @@ class ConfigViewModel(
         }
     }
 
+    /**
+     * Persists the notifications toggle and only returns once the write is durable.
+     * Callers that enqueue device registration must use this rather than the
+     * fire-and-forget event: DeviceRegistrar re-reads this setting and reports DONE
+     * (never retried) if it still sees the stale value.
+     */
+    suspend fun setNotificationsEnabled(enabled: Boolean) {
+        settingsStore.update { it.copy(notificationsEnabled = enabled) }
+    }
+
     private suspend fun refreshMask() {
         apiKeyMasked.value = apiKeyStore.get()?.let(::maskKey)
     }

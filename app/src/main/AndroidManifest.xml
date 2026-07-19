@@ -45,6 +45,15 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <!--
+          Opt-in only: without this, Firebase mints and registers a token on first
+          launch, making the device push-reachable before the user ever enables
+          notifications (which default off). DeviceRegistrar flips it on at opt-in.
+        -->
+        <meta-data
+            android:name="firebase_messaging_auto_init_enabled"
+            android:value="false" />
     </application>
 
 </manifest>

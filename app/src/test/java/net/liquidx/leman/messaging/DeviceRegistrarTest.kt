@@ -31,7 +31,10 @@ class DeviceRegistrarTest {
         )
         val settings = SettingsStore(scope) { File(dir, "settings.preferences_pb") }
         val push = PushPrefsStore(scope) { File(dir, "push.preferences_pb") }
-        return DeviceRegistrar(client, settings, FakeApiKeyStore(key), push) { token } to settings
+        // no-op auto-init: no Firebase app is initialized under Robolectric
+        return DeviceRegistrar(
+            client, settings, FakeApiKeyStore(key), push, enableAutoInit = {},
+        ) { token } to settings
     }
 
     @Test

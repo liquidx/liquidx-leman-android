@@ -19,12 +19,21 @@ class DeviceRegistrar(
     private val settingsStore: SettingsStore,
     private val apiKeyStore: ApiKeyStore,
     private val pushPrefs: PushPrefsStore,
+    /**
+     * Auto-init is off in the manifest so the device isn't push-reachable before
+     * opt-in; enabling it here is the opt-in. Injected because the static
+     * FirebaseMessaging call needs an initialized Firebase app (absent in tests).
+     */
+    private val enableAutoInit: () -> Unit = {
+        com.google.firebase.messaging.FirebaseMessaging.getInstance().isAutoInitEnabled = true
+    },
     private val tokenProvider: suspend () -> String?,
 ) {
     enum class Outcome { DONE, RETRY_LATER, GAVE_UP }
 
     suspend fun register(): Outcome {
         if (!settingsStore.settings.first().notificationsEnabled) return Outcome.DONE
+        enableAutoInit()
         if (apiKeyStore.get().isNullOrBlank()) return Outcome.GAVE_UP
         val token = tokenProvider() ?: return Outcome.RETRY_LATER
         return when (val r = client.registerDevice(token, pushPrefs.deviceId())) {

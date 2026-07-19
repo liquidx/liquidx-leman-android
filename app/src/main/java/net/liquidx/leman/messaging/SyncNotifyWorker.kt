@@ -25,10 +25,19 @@ class SyncNotifyWorker(context: Context, params: WorkerParameters) :
         val container = (applicationContext as LemanApp).container
         if (!container.settings.settings.first().notificationsEnabled) return Result.success()
 
-        container.configurePushClient()
-        val wasSeeded = container.pushPrefs.hasSeeded()
+        // A throw here (e.g. a Keystore decrypt failure reading the api key) would
+        // otherwise fail the worker permanently; a later attempt may well succeed.
+        val wasSeeded: Boolean
+        val result = try {
+            container.configurePushClient()
+            wasSeeded = container.pushPrefs.hasSeeded()
+            container.threadRepository.syncForNotifications()
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            return Result.retry()
+        }
 
-        return when (val result = container.threadRepository.syncForNotifications()) {
+        return when (result) {
             is ApiResult.Ok -> {
                 container.pushPrefs.markSeeded()
                 if (!isForeground()) {

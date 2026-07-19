@@ -53,6 +53,11 @@ class OkHttpHermesClient(
             transport = null
             return
         }
+        // Nothing changed — keep the warm connection pool. configurePushClient()
+        // calls this on every push and every registration; rebuilding would shut
+        // down the executor and evict live connections each time.
+        val current = transport
+        if (current != null && current.baseUrl == url && current.apiKey == apiKey) return
         val rest = OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
