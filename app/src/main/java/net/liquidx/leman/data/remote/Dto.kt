@@ -88,11 +88,8 @@ data class SessionPatchDto(val title: String)
 /** POST /api/devices — registers this device's FCM token for push (FCM push client). */
 @Serializable
 data class DeviceRegistrationDto(
-    @SerialName("fcm_token") val fcmToken: String,
     @SerialName("device_id") val deviceId: String,
-    // Required (no default) so it is always encoded regardless of the shared
-    // Json's encodeDefaults setting — callers pass "android" explicitly.
-    val platform: String,
+    @SerialName("fcm_token") val fcmToken: String,
 )
 
 /** GET /v1/capabilities — gate the whole Sessions feature on these flags (spec §5). */

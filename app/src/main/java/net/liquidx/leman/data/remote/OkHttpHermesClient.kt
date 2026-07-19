@@ -149,19 +149,21 @@ class OkHttpHermesClient(
         return execute(t.rest, t.request("api/sessions/$id").delete().build()) { }
     }
 
+    // The notification bridge is fronted by Caddy on the gateway's own origin under
+    // /notify/* (bridge protocol.md), so it shares the configured server url.
     override suspend fun registerDevice(fcmToken: String, deviceId: String): ApiResult<Unit> {
         val t = transport ?: return ApiResult.Err(ApiError.NotConfigured)
         val body = HermesJson.encodeToString(
             DeviceRegistrationDto.serializer(),
-            DeviceRegistrationDto(fcmToken, deviceId, "android"),
+            DeviceRegistrationDto(deviceId = deviceId, fcmToken = fcmToken),
         )
-        val request = t.request("api/devices").post(body.toRequestBody(jsonMediaType)).build()
+        val request = t.request("notify/v1/devices").post(body.toRequestBody(jsonMediaType)).build()
         return execute(t.rest, request) { }
     }
 
     override suspend fun unregisterDevice(deviceId: String): ApiResult<Unit> {
         val t = transport ?: return ApiResult.Err(ApiError.NotConfigured)
-        return execute(t.rest, t.request("api/devices/$deviceId").delete().build()) { }
+        return execute(t.rest, t.request("notify/v1/devices/$deviceId").delete().build()) { }
     }
 
     override fun chatStream(id: String, message: String): Flow<RunEvent> = flow {

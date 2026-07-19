@@ -178,10 +178,10 @@ class OkHttpHermesClientTest {
         assertTrue(client.registerDevice("tok123", "dev-uuid") is ApiResult.Ok)
         val req = server.takeRequest()
         assertEquals("POST", req.method)
-        assertEquals("/api/devices", req.path)
+        assertEquals("/notify/v1/devices", req.path)
         assertEquals("Bearer testkey", req.getHeader("Authorization"))
         assertEquals(
-            """{"fcm_token":"tok123","device_id":"dev-uuid","platform":"android"}""",
+            """{"device_id":"dev-uuid","fcm_token":"tok123"}""",
             req.body.readUtf8(),
         )
     }
@@ -198,7 +198,7 @@ class OkHttpHermesClientTest {
         assertTrue(client.unregisterDevice("dev-uuid") is ApiResult.Ok)
         val req = server.takeRequest()
         assertEquals("DELETE", req.method)
-        assertEquals("/api/devices/dev-uuid", req.path)
+        assertEquals("/notify/v1/devices/dev-uuid", req.path)
         assertEquals("Bearer testkey", req.getHeader("Authorization"))
     }
 
