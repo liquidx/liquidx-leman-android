@@ -171,4 +171,24 @@ class OkHttpHermesClientTest {
         assertEquals("/api/sessions/s1/chat/stream", req.path)
         assertEquals("""{"message":"hello"}""", req.body.readUtf8())
     }
+
+    @Test
+    fun registerDevice_postsContract() = runTest {
+        server.enqueue(MockResponse().setBody("{}"))
+        assertTrue(client.registerDevice("tok123", "dev-uuid") is ApiResult.Ok)
+        val req = server.takeRequest()
+        assertEquals("POST", req.method)
+        assertEquals("/api/devices", req.path)
+        assertEquals("Bearer testkey", req.getHeader("Authorization"))
+        assertEquals(
+            """{"fcm_token":"tok123","device_id":"dev-uuid","platform":"android"}""",
+            req.body.readUtf8(),
+        )
+    }
+
+    @Test
+    fun registerDevice_404_isClient() = runTest {
+        server.enqueue(MockResponse().setResponseCode(404).setBody("nope"))
+        assertTrue(client.registerDevice("t", "d").errorOrNull() is ApiError.Client)
+    }
 }

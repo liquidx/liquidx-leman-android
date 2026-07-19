@@ -22,6 +22,9 @@ interface HermesClient {
     suspend fun renameSession(id: String, title: String): ApiResult<Unit>
     suspend fun deleteSession(id: String): ApiResult<Unit>
 
+    /** Registers this device's FCM token so the server can push (FCM push client). */
+    suspend fun registerDevice(fcmToken: String, deviceId: String): ApiResult<Unit>
+
     /**
      * Cold flow of a Sessions chat run's events (spec 02 §Sessions). Completes
      * normally when the server closes the stream; fails with

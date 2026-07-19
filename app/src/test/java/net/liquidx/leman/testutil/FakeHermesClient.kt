@@ -89,6 +89,14 @@ class FakeHermesClient : HermesClient {
         return deleteSessionResult
     }
 
+    val registerDeviceCalls = mutableListOf<Pair<String, String>>()
+    var registerDeviceResult: ApiResult<Unit> = ApiResult.Ok(Unit)
+
+    override suspend fun registerDevice(fcmToken: String, deviceId: String): ApiResult<Unit> {
+        registerDeviceCalls += fcmToken to deviceId
+        return registerDeviceResult
+    }
+
     override fun chatStream(id: String, message: String): Flow<RunEvent> = flow {
         chatCalls += id to message
         val script = when {

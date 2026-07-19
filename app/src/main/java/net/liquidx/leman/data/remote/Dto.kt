@@ -5,8 +5,15 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 
-/** Wire JSON config: the gateway evolves independently, never crash on new fields. */
-val HermesJson: Json = Json { ignoreUnknownKeys = true }
+/**
+ * Wire JSON config: the gateway evolves independently, never crash on new
+ * fields. `encodeDefaults = true` so request DTOs with default values (e.g.
+ * [DeviceRegistrationDto.platform]) are always sent, not silently dropped.
+ */
+val HermesJson: Json = Json {
+    ignoreUnknownKeys = true
+    encodeDefaults = true
+}
 
 @Serializable
 data class HealthDto(
@@ -84,6 +91,14 @@ data class ChatRequestDto(val message: String)
 
 @Serializable
 data class SessionPatchDto(val title: String)
+
+/** POST /api/devices — registers this device's FCM token for push (FCM push client). */
+@Serializable
+data class DeviceRegistrationDto(
+    @SerialName("fcm_token") val fcmToken: String,
+    @SerialName("device_id") val deviceId: String,
+    val platform: String = "android",
+)
 
 /** GET /v1/capabilities — gate the whole Sessions feature on these flags (spec §5). */
 @Serializable
