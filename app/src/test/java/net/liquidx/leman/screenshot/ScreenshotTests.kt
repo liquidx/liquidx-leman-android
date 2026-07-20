@@ -16,6 +16,7 @@ import java.time.ZoneOffset
 import net.liquidx.leman.data.remote.Fixtures
 import net.liquidx.leman.domain.model.ConnState
 import net.liquidx.leman.ui.components.ConfigTab
+import net.liquidx.leman.ui.components.JobsTab
 import net.liquidx.leman.ui.components.ThreadsTab
 import net.liquidx.leman.ui.config.ConfigScreen
 import net.liquidx.leman.ui.config.ConfigUiState
@@ -48,7 +49,7 @@ class ScreenshotTests {
     @get:Rule
     val compose = createComposeRule()
 
-    private val tabs = listOf(ThreadsTab, ConfigTab)
+    private val tabs = listOf(ThreadsTab, JobsTab, ConfigTab)
 
     /**
      * [settleMillis] defaults to one frame so looping animations (the running
@@ -212,6 +213,58 @@ class ScreenshotTests {
             serverUrlState = rememberTextFieldState("https://api.gent.ino.ink"),
             // production seeds this from settings; default agent name is "juno"
             agentNameState = rememberTextFieldState("juno"),
+        )
+    }
+
+    // ---- 2e / 2f -----------------------------------------------------------
+
+    private fun jobsItems() = listOf(
+        net.liquidx.leman.ui.jobs.JobListItem(
+            id = "job-1", name = "techmeme daily headlines", scheduleDisplay = "0 7 * * *",
+            stateLabel = "scheduled", tone = net.liquidx.leman.ui.jobs.JobTone.Accent, nextRunLabel = "07:00",
+        ),
+        net.liquidx.leman.ui.jobs.JobListItem(
+            id = "job-2", name = "gmail digest", scheduleDisplay = "every 120m",
+            stateLabel = "failed", tone = net.liquidx.leman.ui.jobs.JobTone.Danger, nextRunLabel = "11:20",
+        ),
+        net.liquidx.leman.ui.jobs.JobListItem(
+            id = "job-3", name = "weekly review", scheduleDisplay = "0 9 * * 1",
+            stateLabel = "paused", tone = net.liquidx.leman.ui.jobs.JobTone.Faint, nextRunLabel = null,
+        ),
+    )
+
+    @Test
+    fun jobs_default() = snap("2e-jobs-default") {
+        net.liquidx.leman.ui.jobs.JobsScreen(
+            state = net.liquidx.leman.ui.jobs.JobsUiState(
+                items = jobsItems(), totalCount = 3, pausedCount = 1,
+                connState = ConnState.Online("0.18.0"), loaded = true,
+            ),
+            clock = "09:41", tabs = tabs, onEvent = {},
+            onOpenJob = {}, onNewJob = {}, onOpenThreads = {}, onOpenConfig = {},
+        )
+    }
+
+    @Test
+    fun jobs_empty() = snap("2e-jobs-empty") {
+        net.liquidx.leman.ui.jobs.JobsScreen(
+            state = net.liquidx.leman.ui.jobs.JobsUiState(
+                connState = ConnState.Online("0.18.0"), loaded = true,
+            ),
+            clock = "09:41", tabs = tabs, onEvent = {},
+            onOpenJob = {}, onNewJob = {}, onOpenThreads = {}, onOpenConfig = {},
+        )
+    }
+
+    @Test
+    fun jobEdit_existing() = snap("2f-job-edit") {
+        net.liquidx.leman.ui.jobs.JobEditScreen(
+            state = net.liquidx.leman.ui.jobs.JobEditUiState(isNew = false, enabled = true),
+            clock = "09:41", connState = ConnState.Online("0.18.0"),
+            onEvent = {}, onCancel = {},
+            nameState = rememberTextFieldState("techmeme daily headlines"),
+            scheduleState = rememberTextFieldState("0 7 * * *"),
+            promptState = rememberTextFieldState("visit techmeme.com and produce a concise daily roundup."),
         )
     }
 

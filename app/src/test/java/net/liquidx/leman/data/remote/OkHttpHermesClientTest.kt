@@ -173,6 +173,62 @@ class OkHttpHermesClientTest {
     }
 
     @Test
+    fun listJobs_getsAndUnwraps() = runTest {
+        server.enqueue(MockResponse().setBody(Fixtures.load("wire/jobs.json")))
+        val result = client.listJobs() as ApiResult.Ok
+        assertEquals(listOf("c526238e14c7", "fc50f3d48141"), result.value.map { it.id })
+        val req = server.takeRequest()
+        assertEquals("GET", req.method)
+        assertEquals("/api/jobs", req.path)
+        assertEquals("Bearer testkey", req.getHeader("Authorization"))
+    }
+
+    @Test
+    fun createJob_postsContract_unwrapsEnvelope() = runTest {
+        server.enqueue(MockResponse().setBody(
+            """{"job":{"id":"3121d2d43d3f","name":"probe","prompt":"say hi","schedule_display":"0 5 1 1 *"}}""",
+        ))
+        val result = client.createJob(JobCreateDto("probe", "say hi", "0 5 1 1 *")) as ApiResult.Ok
+        assertEquals("3121d2d43d3f", result.value.id)
+        val req = server.takeRequest()
+        assertEquals("POST", req.method)
+        assertEquals("/api/jobs", req.path)
+        assertEquals("""{"name":"probe","prompt":"say hi","schedule":"0 5 1 1 *"}""", req.body.readUtf8())
+    }
+
+    @Test
+    fun updateJob_patchesOnlySetFields() = runTest {
+        server.enqueue(MockResponse().setBody("""{"job":{"id":"3121d2d43d3f","enabled":false}}"""))
+        val result = client.updateJob("3121d2d43d3f", JobPatchDto(enabled = false)) as ApiResult.Ok
+        assertEquals(false, result.value.enabled)
+        val req = server.takeRequest()
+        assertEquals("PATCH", req.method)
+        assertEquals("/api/jobs/3121d2d43d3f", req.path)
+        assertEquals("""{"enabled":false}""", req.body.readUtf8())
+    }
+
+    @Test
+    fun deleteJob_deletes() = runTest {
+        server.enqueue(MockResponse().setBody("""{"ok":true}"""))
+        assertTrue(client.deleteJob("3121d2d43d3f") is ApiResult.Ok)
+        val req = server.takeRequest()
+        assertEquals("DELETE", req.method)
+        assertEquals("/api/jobs/3121d2d43d3f", req.path)
+    }
+
+    @Test
+    fun jobsErrorMapping_stringErrorBody_surfacesMessage() = runTest {
+        // /api/jobs errors are {"error":"…"} strings, not the /v1 object envelope;
+        // the invalid-schedule 500 carries usage text the edit screen shows inline.
+        server.enqueue(MockResponse().setResponseCode(500).setBody(
+            """{"error":"Invalid schedule 'x'. Use:\n  - Cron: '0 9 * * *'"}""",
+        ))
+        val error = client.updateJob("3121d2d43d3f", JobPatchDto(schedule = "x")).errorOrNull() as ApiError.Server
+        assertEquals(500, error.code)
+        assertTrue(error.message!!.startsWith("Invalid schedule"))
+    }
+
+    @Test
     fun registerDevice_postsContract() = runTest {
         server.enqueue(MockResponse().setBody("{}"))
         assertTrue(client.registerDevice("tok123", "dev-uuid") is ApiResult.Ok)

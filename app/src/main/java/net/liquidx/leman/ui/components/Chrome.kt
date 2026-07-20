@@ -112,6 +112,7 @@ data class LemanTab(
 )
 
 val ThreadsTab = LemanTab("threads", "threads", TablerIcons.Message)
+val JobsTab = LemanTab("jobs", "jobs", TablerIcons.Clock)
 val ConfigTab = LemanTab("config", "config", TablerIcons.Settings)
 
 /** Tab bar (spec 06): 16dp Tabler icon + 9sp label; active = accent + 2dp top rule. */

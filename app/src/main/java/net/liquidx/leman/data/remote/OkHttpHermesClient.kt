@@ -149,6 +149,36 @@ class OkHttpHermesClient(
         return execute(t.rest, t.request("api/sessions/$id").delete().build()) { }
     }
 
+    override suspend fun listJobs(): ApiResult<List<JobDto>> {
+        val t = transport ?: return ApiResult.Err(ApiError.NotConfigured)
+        return execute(t.rest, t.request("api/jobs").get().build()) {
+            HermesJson.decodeFromString(JobListDto.serializer(), it).jobs
+        }
+    }
+
+    override suspend fun createJob(job: JobCreateDto): ApiResult<JobDto> {
+        val t = transport ?: return ApiResult.Err(ApiError.NotConfigured)
+        val body = HermesJson.encodeToString(JobCreateDto.serializer(), job)
+        val request = t.request("api/jobs").post(body.toRequestBody(jsonMediaType)).build()
+        return execute(t.rest, request) {
+            HermesJson.decodeFromString(JobEnvelopeDto.serializer(), it).job
+        }
+    }
+
+    override suspend fun updateJob(id: String, patch: JobPatchDto): ApiResult<JobDto> {
+        val t = transport ?: return ApiResult.Err(ApiError.NotConfigured)
+        val body = HermesJson.encodeToString(JobPatchDto.serializer(), patch)
+        val request = t.request("api/jobs/$id").patch(body.toRequestBody(jsonMediaType)).build()
+        return execute(t.rest, request) {
+            HermesJson.decodeFromString(JobEnvelopeDto.serializer(), it).job
+        }
+    }
+
+    override suspend fun deleteJob(id: String): ApiResult<Unit> {
+        val t = transport ?: return ApiResult.Err(ApiError.NotConfigured)
+        return execute(t.rest, t.request("api/jobs/$id").delete().build()) { }
+    }
+
     // The notification bridge is fronted by Caddy on the gateway's own origin under
     // /notify/* (bridge protocol.md), so it shares the configured server url.
     override suspend fun registerDevice(fcmToken: String, deviceId: String): ApiResult<Unit> {

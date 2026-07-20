@@ -32,11 +32,16 @@ import kotlinx.coroutines.launch
 import net.liquidx.leman.BuildConfig
 import net.liquidx.leman.di.AppContainer
 import net.liquidx.leman.ui.components.ConfigTab
+import net.liquidx.leman.ui.components.JobsTab
 import net.liquidx.leman.ui.components.LemanTab
 import net.liquidx.leman.ui.components.ThreadsTab
 import net.liquidx.leman.ui.config.ConfigScreen
 import net.liquidx.leman.ui.config.ConfigViewModel
 import net.liquidx.leman.ui.format.TimeFormat
+import net.liquidx.leman.ui.jobs.JobEditScreen
+import net.liquidx.leman.ui.jobs.JobEditViewModel
+import net.liquidx.leman.ui.jobs.JobsScreen
+import net.liquidx.leman.ui.jobs.JobsViewModel
 import net.liquidx.leman.ui.newthread.NewThreadScreen
 import net.liquidx.leman.ui.newthread.NewThreadViewModel
 import net.liquidx.leman.ui.thread.ThreadScreen
@@ -48,9 +53,13 @@ object Routes {
     const val THREADS = "threads"
     const val THREAD = "thread/{threadId}"
     const val NEW_THREAD = "newThread"
+    const val JOBS = "jobs"
+    const val JOB_EDIT = "job/{jobId}"
+    const val NEW_JOB = "newJob"
     const val CONFIG = "config"
 
     fun thread(id: String) = "thread/$id"
+    fun jobEdit(id: String) = "job/$id"
 }
 
 /** Live "HH:mm" for the status row, updating each minute. */
@@ -77,7 +86,7 @@ fun LemanNavHost(
     val clock = rememberWallClock()
     val context = LocalContext.current
     val tabs = remember(container) {
-        listOf(ThreadsTab, ConfigTab) + container.debugHooks?.extraTabs.orEmpty()
+        listOf(ThreadsTab, JobsTab, ConfigTab) + container.debugHooks?.extraTabs.orEmpty()
     }
     val fade = tween<Float>(net.liquidx.leman.ui.theme.LemanMotion.screenFadeMillis)
 
@@ -165,6 +174,35 @@ fun LemanNavHost(
                 onCancel = { navController.popBackStack() },
                 textState = vm.textState,
             )
+        }
+
+        composable(Routes.JOBS) {
+            val vm: JobsViewModel = viewModel(
+                factory = viewModelFactory {
+                    initializer { JobsViewModel(container.jobsRepository, container.connectionManager) }
+                },
+            )
+            val state by vm.state.collectAsStateWithLifecycle()
+            JobsScreen(
+                state = state,
+                clock = clock,
+                tabs = tabs,
+                onEvent = vm::onEvent,
+                onOpenJob = { navController.navigate(Routes.jobEdit(it)) },
+                onNewJob = { navController.navigate(Routes.NEW_JOB) },
+                onOpenThreads = { navController.navigate(Routes.THREADS) { launchSingleTop = true } },
+                onOpenConfig = { navController.navigate(Routes.CONFIG) { launchSingleTop = true } },
+                onSelectTab = { tab -> navController.navigate(tab.id) { launchSingleTop = true } },
+            )
+        }
+
+        composable(Routes.JOB_EDIT) { entry ->
+            val jobId = entry.arguments?.getString("jobId") ?: return@composable
+            JobEditDestination(container, navController, clock, jobId)
+        }
+
+        composable(Routes.NEW_JOB) {
+            JobEditDestination(container, navController, clock, jobId = null)
         }
 
         composable(Routes.CONFIG) {
@@ -264,6 +302,36 @@ fun LemanNavHost(
 
         container.debugHooks?.registerDestinations(this, navController)
     }
+}
+
+@Composable
+private fun JobEditDestination(
+    container: AppContainer,
+    navController: NavHostController,
+    clock: String,
+    jobId: String?,
+) {
+    val vm: JobEditViewModel = viewModel(
+        key = "job-${jobId ?: "new"}",
+        factory = viewModelFactory {
+            initializer { JobEditViewModel(container.jobsRepository, jobId) }
+        },
+    )
+    val state by vm.state.collectAsStateWithLifecycle()
+    val connState by container.connectionManager.state.collectAsState()
+    LaunchedEffect(vm) {
+        vm.done.collect { navController.popBackStack() }
+    }
+    JobEditScreen(
+        state = state,
+        clock = clock,
+        connState = connState,
+        onEvent = vm::onEvent,
+        onCancel = { navController.popBackStack() },
+        nameState = vm.nameState,
+        scheduleState = vm.scheduleState,
+        promptState = vm.promptState,
+    )
 }
 
 private fun enqueueRegister(context: android.content.Context) {

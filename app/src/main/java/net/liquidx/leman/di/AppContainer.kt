@@ -12,6 +12,7 @@ import net.liquidx.leman.data.local.LemanDatabase
 import net.liquidx.leman.data.remote.HermesClient
 import net.liquidx.leman.data.remote.OkHttpHermesClient
 import net.liquidx.leman.data.repo.ConnectionManager
+import net.liquidx.leman.data.repo.JobsRepository
 import net.liquidx.leman.data.repo.SyncScheduler
 import net.liquidx.leman.data.repo.ThreadRepository
 import net.liquidx.leman.data.settings.ApiKeyStore
@@ -124,6 +125,13 @@ class AppContainer(
             // safe even though threadRepository is constructed first in the graph —
             // the lambda only resolves messageNotifier when markRead actually fires.
             onThreadRead = { threadId -> messageNotifier.cancel(threadId) },
+        )
+    }
+
+    val jobsRepository: JobsRepository by lazy {
+        JobsRepository(
+            client = hermesClient,
+            onAuthFailure = { code -> connectionManager.onAuthFailure(code) },
         )
     }
 

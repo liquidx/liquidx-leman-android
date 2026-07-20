@@ -39,4 +39,12 @@ object TimeFormat {
 
     fun monthDay(epochMillis: Long, zone: ZoneId): String =
         monthDayFormat.format(Instant.ofEpochMilli(epochMillis).atZone(zone)).lowercase(Locale.ROOT)
+
+    /** Future-facing (jobs' next run): `HH:mm` on today's local date, else `jul 21 07:00`. */
+    fun upcomingLabel(epochMillis: Long, nowMillis: Long, zone: ZoneId): String {
+        val day = LocalDate.ofInstant(Instant.ofEpochMilli(epochMillis), zone)
+        val today = LocalDate.ofInstant(Instant.ofEpochMilli(nowMillis), zone)
+        val time = clock(epochMillis, zone)
+        return if (day == today) time else "${monthDay(epochMillis, zone)} $time"
+    }
 }

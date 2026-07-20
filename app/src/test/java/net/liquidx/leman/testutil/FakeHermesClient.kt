@@ -5,6 +5,9 @@ import kotlinx.coroutines.flow.flow
 import net.liquidx.leman.data.remote.CapabilitiesDto
 import net.liquidx.leman.data.remote.HealthDto
 import net.liquidx.leman.data.remote.HermesClient
+import net.liquidx.leman.data.remote.JobCreateDto
+import net.liquidx.leman.data.remote.JobDto
+import net.liquidx.leman.data.remote.JobPatchDto
 import net.liquidx.leman.data.remote.SessionDto
 import net.liquidx.leman.data.remote.SessionListDto
 import net.liquidx.leman.data.remote.SessionMessageDto
@@ -87,6 +90,36 @@ class FakeHermesClient : HermesClient {
     override suspend fun deleteSession(id: String): ApiResult<Unit> {
         deleteCalls += id
         return deleteSessionResult
+    }
+
+    var listJobsResult: ApiResult<List<JobDto>> = ApiResult.Ok(emptyList())
+    var createJobResult: ApiResult<JobDto> = ApiResult.Ok(JobDto(id = "job1"))
+    var updateJobResult: ApiResult<JobDto> = ApiResult.Ok(JobDto(id = "job1"))
+    var deleteJobResult: ApiResult<Unit> = ApiResult.Ok(Unit)
+
+    var listJobsCalls = 0
+    val createJobCalls = mutableListOf<JobCreateDto>()
+    val updateJobCalls = mutableListOf<Pair<String, JobPatchDto>>()
+    val deleteJobCalls = mutableListOf<String>()
+
+    override suspend fun listJobs(): ApiResult<List<JobDto>> {
+        listJobsCalls++
+        return listJobsResult
+    }
+
+    override suspend fun createJob(job: JobCreateDto): ApiResult<JobDto> {
+        createJobCalls += job
+        return createJobResult
+    }
+
+    override suspend fun updateJob(id: String, patch: JobPatchDto): ApiResult<JobDto> {
+        updateJobCalls += id to patch
+        return updateJobResult
+    }
+
+    override suspend fun deleteJob(id: String): ApiResult<Unit> {
+        deleteJobCalls += id
+        return deleteJobResult
     }
 
     val registerDeviceCalls = mutableListOf<Pair<String, String>>()

@@ -9,10 +9,19 @@ import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.unit.dp
 
 /**
- * Exactly two Tabler icons (MIT), tab bar only (spec 06): 24dp viewport,
+ * A handful of Tabler icons (MIT), tab bar only (spec 06): 24dp viewport,
  * stroke 1.5, butt caps, miter joins, drawn at 16dp. License note in NOTICE.
  */
 object TablerIcons {
+    /** Jobs tab — Tabler "clock". */
+    val Clock: ImageVector by lazy {
+        tablerIcon(
+            "TablerClock",
+            "M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0",
+            "M12 7v5l3 3",
+        )
+    }
+
     val Message: ImageVector by lazy {
         tablerIcon(
             "TablerMessage",

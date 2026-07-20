@@ -92,6 +92,59 @@ data class DeviceRegistrationDto(
     @SerialName("fcm_token") val fcmToken: String,
 )
 
+/**
+ * `/api/jobs` — the gateway's scheduled-job store (jobs-tab design). Timestamps
+ * are ISO-8601 strings with offset, unlike sessions' float epochs.
+ */
+@Serializable
+data class JobDto(
+    val id: String,
+    val name: String = "",
+    val prompt: String = "",
+    val schedule: JobScheduleDto? = null,
+    @SerialName("schedule_display") val scheduleDisplay: String = "",
+    val enabled: Boolean = true,
+    val state: String = "scheduled",
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("next_run_at") val nextRunAt: String? = null,
+    @SerialName("last_run_at") val lastRunAt: String? = null,
+    @SerialName("last_status") val lastStatus: String? = null,
+    @SerialName("last_error") val lastError: String? = null,
+    val repeat: JobRepeatDto? = null,
+)
+
+/** Server-normalized form of the schedule string (`cron`/`interval`/`at`). */
+@Serializable
+data class JobScheduleDto(
+    val kind: String = "",
+    val expr: String? = null,
+    val minutes: Int? = null,
+    val display: String = "",
+)
+
+@Serializable
+data class JobRepeatDto(val times: Int? = null, val completed: Int = 0)
+
+@Serializable
+data class JobListDto(val jobs: List<JobDto> = emptyList())
+
+/** Job mutations all nest the resulting job under `job`. */
+@Serializable
+data class JobEnvelopeDto(val job: JobDto)
+
+/** `schedule` is a free string the server validates: `30m`, `every 2h`, cron, ISO time. */
+@Serializable
+data class JobCreateDto(val name: String, val prompt: String, val schedule: String)
+
+/** PATCH body — defaults stay unencoded so absent fields are left untouched. */
+@Serializable
+data class JobPatchDto(
+    val name: String? = null,
+    val prompt: String? = null,
+    val schedule: String? = null,
+    val enabled: Boolean? = null,
+)
+
 /** GET /v1/capabilities — gate the whole Sessions feature on these flags (spec §5). */
 @Serializable
 data class CapabilitiesDto(

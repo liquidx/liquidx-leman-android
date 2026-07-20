@@ -14,6 +14,10 @@ import net.liquidx.leman.data.remote.CapabilitiesDto
 import net.liquidx.leman.data.remote.HealthDto
 import net.liquidx.leman.data.remote.HermesClient
 import net.liquidx.leman.data.remote.HermesStreamException
+import net.liquidx.leman.data.remote.JobCreateDto
+import net.liquidx.leman.data.remote.JobDto
+import net.liquidx.leman.data.remote.JobPatchDto
+import net.liquidx.leman.data.remote.JobScheduleDto
 import net.liquidx.leman.data.remote.SessionDto
 import net.liquidx.leman.data.remote.SessionListDto
 import net.liquidx.leman.data.remote.SessionMessageDto
@@ -178,6 +182,68 @@ class FakeHermesServer : HermesClient {
 
     override suspend fun unregisterDevice(deviceId: String): ApiResult<Unit> = ApiResult.Ok(Unit)
 
+    private val jobs = ConcurrentHashMap<String, JobDto>().apply {
+        put(
+            "fakejob000001",
+            JobDto(
+                id = "fakejob000001",
+                name = "daily digest",
+                prompt = "summarize the day's email",
+                schedule = JobScheduleDto(kind = "cron", expr = "0 7 * * *", display = "0 7 * * *"),
+                scheduleDisplay = "0 7 * * *",
+                nextRunAt = "2026-07-21T07:00:00+09:00",
+                lastRunAt = "2026-07-20T07:00:58+09:00",
+                lastStatus = "ok",
+            ),
+        )
+        put(
+            "fakejob000002",
+            JobDto(
+                id = "fakejob000002",
+                name = "hourly check",
+                prompt = "check the monitors",
+                schedule = JobScheduleDto(kind = "interval", minutes = 60, display = "every 60m"),
+                scheduleDisplay = "every 60m",
+                enabled = false,
+                state = "paused",
+                lastStatus = "error",
+                lastError = "tool timeout",
+            ),
+        )
+    }
+    private val jobCounter = AtomicInteger(2)
+
+    override suspend fun listJobs(): ApiResult<List<JobDto>> = ApiResult.Ok(jobs.values.sortedBy { it.name })
+
+    override suspend fun createJob(job: JobCreateDto): ApiResult<JobDto> {
+        if (job.name.isBlank()) return ApiResult.Err(ApiError.Client(400, "Name is required"))
+        val id = "fakejob%06d".format(jobCounter.incrementAndGet())
+        val dto = JobDto(
+            id = id,
+            name = job.name,
+            prompt = job.prompt,
+            schedule = JobScheduleDto(kind = "cron", expr = job.schedule, display = job.schedule),
+            scheduleDisplay = job.schedule,
+        )
+        jobs[id] = dto
+        return ApiResult.Ok(dto)
+    }
+
+    override suspend fun updateJob(id: String, patch: JobPatchDto): ApiResult<JobDto> {
+        val current = jobs[id] ?: return ApiResult.Err(ApiError.Client(404, "Job not found"))
+        val updated = current.copy(
+            name = patch.name ?: current.name,
+            prompt = patch.prompt ?: current.prompt,
+            scheduleDisplay = patch.schedule ?: current.scheduleDisplay,
+            enabled = patch.enabled ?: current.enabled,
+        )
+        jobs[id] = updated
+        return ApiResult.Ok(updated)
+    }
+
+    override suspend fun deleteJob(id: String): ApiResult<Unit> =
+        if (jobs.remove(id) != null) ApiResult.Ok(Unit) else ApiResult.Err(ApiError.Client(404, "Job not found"))
+
     /**
      * Translates [scriptFor]'s run-vocabulary events into the chat vocabulary:
      * `run.started` first, deltas/tool events unchanged (with Streaming's
@@ -313,6 +379,10 @@ class SwitchableHermesClient(
     override suspend fun createSession() = active.createSession()
     override suspend fun renameSession(id: String, title: String) = active.renameSession(id, title)
     override suspend fun deleteSession(id: String) = active.deleteSession(id)
+    override suspend fun listJobs() = active.listJobs()
+    override suspend fun createJob(job: JobCreateDto) = active.createJob(job)
+    override suspend fun updateJob(id: String, patch: JobPatchDto) = active.updateJob(id, patch)
+    override suspend fun deleteJob(id: String) = active.deleteJob(id)
     override suspend fun registerDevice(fcmToken: String, deviceId: String) = real.registerDevice(fcmToken, deviceId)
     override suspend fun unregisterDevice(deviceId: String) = real.unregisterDevice(deviceId)
 

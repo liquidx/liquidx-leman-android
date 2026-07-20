@@ -43,6 +43,39 @@ class DtoTest {
     }
 
     @Test
+    fun jobList_decodesFixture_ignoringUnknownFields() {
+        val dto = HermesJson.decodeFromString(JobListDto.serializer(), Fixtures.load("wire/jobs.json"))
+        assertEquals(2, dto.jobs.size)
+        val cron = dto.jobs[0]
+        assertEquals("c526238e14c7", cron.id)
+        assertEquals("Techmeme Daily Headlines", cron.name)
+        assertEquals("0 7 * * *", cron.scheduleDisplay)
+        assertEquals("cron", cron.schedule?.kind)
+        assertTrue(cron.enabled)
+        assertEquals("2026-07-21T07:00:00+09:00", cron.nextRunAt)
+        assertEquals("ok", cron.lastStatus)
+        assertEquals(71, cron.repeat?.completed)
+        val paused = dto.jobs[1]
+        assertFalse(paused.enabled)
+        assertEquals("paused", paused.state)
+        assertEquals(120, paused.schedule?.minutes)
+        assertEquals("tool timeout", paused.lastError)
+        assertEquals(null, paused.nextRunAt)
+    }
+
+    @Test
+    fun jobPatch_encodesOnlySetFields() {
+        assertEquals(
+            """{"enabled":false}""",
+            HermesJson.encodeToString(JobPatchDto.serializer(), JobPatchDto(enabled = false)),
+        )
+        assertEquals(
+            """{"name":"n","schedule":"every 2h"}""",
+            HermesJson.encodeToString(JobPatchDto.serializer(), JobPatchDto(name = "n", schedule = "every 2h")),
+        )
+    }
+
+    @Test
     fun sessionEnvelope_decodes_createResponse() {
         val json = """{"object":"hermes.session","session":{"id":"api_1_a","source":"api_server","started_at":1.0}}"""
         assertEquals("api_1_a", HermesJson.decodeFromString(SessionEnvelopeDto.serializer(), json).session.id)

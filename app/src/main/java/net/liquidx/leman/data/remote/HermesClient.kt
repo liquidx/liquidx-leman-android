@@ -22,6 +22,12 @@ interface HermesClient {
     suspend fun renameSession(id: String, title: String): ApiResult<Unit>
     suspend fun deleteSession(id: String): ApiResult<Unit>
 
+    /** Scheduled-jobs admin, `/api/jobs` (jobs-tab design). */
+    suspend fun listJobs(): ApiResult<List<JobDto>>
+    suspend fun createJob(job: JobCreateDto): ApiResult<JobDto>
+    suspend fun updateJob(id: String, patch: JobPatchDto): ApiResult<JobDto>
+    suspend fun deleteJob(id: String): ApiResult<Unit>
+
     /** Registers this device's FCM token so the server can push (FCM push client). */
     suspend fun registerDevice(fcmToken: String, deviceId: String): ApiResult<Unit>
 
