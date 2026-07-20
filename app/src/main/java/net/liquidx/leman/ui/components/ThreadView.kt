@@ -82,6 +82,7 @@ fun UserTurn(
     modifier: Modifier = Modifier,
     onRetry: () -> Unit = {},
     onDiscard: () -> Unit = {},
+    onLinkClick: (String) -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -98,6 +99,7 @@ fun UserTurn(
             markdown,
             style = LemanMarkdown.userTurn,
             modifier = Modifier.padding(top = 5.dp),
+            onLinkClick = onLinkClick,
         )
         if (failed) {
             Row(modifier = Modifier.padding(top = 6.dp)) {
@@ -152,7 +154,7 @@ fun AgentTurn(
                     is AgentBlock.Code -> CodeBlock(block)
                     is AgentBlock.TaskList -> TaskListBlock(block)
                     is AgentBlock.Actions -> ActionRow(block, actionsEnabled, onAction)
-                    is AgentBlock.Collapsible -> CollapsibleBlock(block)
+                    is AgentBlock.Collapsible -> CollapsibleBlock(block, onLinkClick = onLinkClick)
                     is AgentBlock.OptionTable -> OptionTableBlock(block)
                 }
             }
@@ -286,6 +288,7 @@ fun SystemTurn(
     expanded: Boolean,
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
+    onLinkClick: (String) -> Unit = {},
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
         TraceLine(
@@ -300,6 +303,7 @@ fun SystemTurn(
                     markdown,
                     style = LemanMarkdown.agentTurn,
                     modifier = Modifier.padding(top = 5.dp),
+                    onLinkClick = onLinkClick,
                 )
             }
         }

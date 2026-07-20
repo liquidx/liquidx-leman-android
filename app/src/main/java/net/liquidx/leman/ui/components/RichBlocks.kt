@@ -95,7 +95,11 @@ fun ActionRow(
 
 /** Collapsible section — same ▸/▾ muted-line grammar as traces (spec 05). */
 @Composable
-fun CollapsibleBlock(block: AgentBlock.Collapsible, modifier: Modifier = Modifier) {
+fun CollapsibleBlock(
+    block: AgentBlock.Collapsible,
+    modifier: Modifier = Modifier,
+    onLinkClick: (String) -> Unit = {},
+) {
     var expanded by rememberSaveable(block.summary) { mutableStateOf(false) }
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
@@ -119,7 +123,7 @@ fun CollapsibleBlock(block: AgentBlock.Collapsible, modifier: Modifier = Modifie
                     .hairlineBorder(Color(0x12FFFFFF))
                     .padding(12.dp),
             ) {
-                MarkdownBody(block.body, style = LemanMarkdown.agentTurn)
+                MarkdownBody(block.body, style = LemanMarkdown.agentTurn, onLinkClick = onLinkClick)
             }
         }
     }

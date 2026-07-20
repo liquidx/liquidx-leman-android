@@ -133,6 +133,7 @@ fun ThreadScreen(
                                     failed = turn.sendState == SendState.Failed,
                                     onRetry = { onEvent(ThreadEvent.Retry(turn.id)) },
                                     onDiscard = { onEvent(ThreadEvent.Discard(turn.id)) },
+                                    onLinkClick = onLinkClick,
                                 )
                             }
 
@@ -165,6 +166,7 @@ fun ThreadScreen(
                                     markdown = turn.markdown.orEmpty(),
                                     expanded = state.expandedTraces.contains(turn.id),
                                     onToggle = { onEvent(ThreadEvent.ToggleTrace(turn.id)) },
+                                    onLinkClick = onLinkClick,
                                 )
                             }
                         }

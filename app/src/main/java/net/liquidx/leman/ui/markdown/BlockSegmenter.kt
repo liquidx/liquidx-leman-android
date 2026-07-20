@@ -4,6 +4,7 @@ import net.liquidx.leman.domain.model.AgentBlock
 import net.liquidx.leman.domain.model.OptionRow
 import net.liquidx.leman.domain.model.TaskItem
 import net.liquidx.leman.domain.model.TaskItemState
+import org.commonmark.ext.autolink.AutolinkExtension
 import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension
 import org.commonmark.ext.gfm.tables.TableBlock
 import org.commonmark.ext.gfm.tables.TableBody
@@ -22,9 +23,13 @@ import org.commonmark.node.Text
 import org.commonmark.parser.IncludeSourceSpans
 import org.commonmark.parser.Parser
 
-private val extensions = listOf(TablesExtension.create(), StrikethroughExtension.create())
+private val extensions = listOf(
+    TablesExtension.create(),
+    StrikethroughExtension.create(),
+    AutolinkExtension.create(),
+)
 
-/** Shared parser: GFM tables + strikethrough, source spans for prose slicing. */
+/** Shared parser: GFM tables + strikethrough + bare-URL autolink, source spans for prose slicing. */
 val LemanMarkdownParser: Parser = Parser.builder()
     .extensions(extensions)
     .includeSourceSpans(IncludeSourceSpans.BLOCKS)
